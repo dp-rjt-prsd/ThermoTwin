@@ -1,0 +1,8 @@
+# Illustrative starting conditions for the ThermoTwin prototype.
+simulation:
+  default_time_step_s: 1.0
+  initial_soc_fraction: 0.8
+  initial_cell_temperature_k: 298.15
+  ambient_temperature_k: 298.15
+  coolant_inlet_temperature_k: 293.15
+  initial_current_a: 0.0

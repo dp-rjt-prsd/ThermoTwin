@@ -6,7 +6,7 @@
   - Acceptance: Python package imports; pytest discovers a smoke test; `.gitignore`, metadata, dependency groups, Ruff, and mypy configuration exist.
   - Verify: `python -m pytest tests/test_package.py`; `python -m ruff check .`; `python -m mypy src tests`.
   - Dependencies: none.
-- [ ] TASK-01 Define validated shared contracts and default YAML configuration.
+- [x] TASK-01 Define validated shared contracts and default YAML configuration.
   - Acceptance: explicit-unit state/action/config dataclasses validate shapes, ranges, and flow bounds; defaults describe a 3x4 pack.
   - Verify: `python -m pytest tests/test_types.py`.
   - Dependencies: TASK-00.

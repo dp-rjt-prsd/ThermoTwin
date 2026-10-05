@@ -1,0 +1,19 @@
+# Illustrative lumped 3x4 pack values for the ThermoTwin prototype.
+# These values are not manufacturer-specific.
+pack:
+  rows: 3
+  columns: 4
+  cell_mass_kg: 0.8
+  cell_specific_heat_capacity_j_kg_k: 900.0
+  nominal_cell_resistance_ohm: 0.015
+  cell_capacity_ah: 50.0
+  neighbor_thermal_resistance_k_w: 1.5
+  ambient_thermal_resistance_k_w: 8.0
+  cell_cooling_surface_area_m2: 0.02
+
+cooling:
+  minimum_coolant_mass_flow_kg_s: 0.0
+  maximum_coolant_mass_flow_kg_s: 0.1
+  base_heat_transfer_coefficient_w_m2_k: 5.0
+  flow_heat_transfer_gain: 500.0
+  flow_exponent: 0.8
