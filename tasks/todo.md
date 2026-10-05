@@ -1,4 +1,4 @@
-# ThermoTwin Phase 0-2 Tasks
+# ThermoTwin Phase 0-5 Tasks
 
 ## Phase 0
 
@@ -59,3 +59,83 @@
   - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests`.
   - Dependencies: TASK-08, TASK-09.
 - [x] Checkpoint P2: Phase 0-2 accepted and ready for baseline-controller work.
+
+## Phase 3
+
+- [ ] TASK-11 Freeze the controller protocol and controller YAML.
+  - Acceptance: runtime-checkable controllers expose `reset()` and `act(BatteryState) -> CoolingAction`; illustrative thresholds, PID gains, flow limits, safety temperature, and pump coefficient are explicit configuration.
+  - Verify: `python -m pytest tests/test_control_base.py`.
+  - Dependencies: TASK-10.
+- [ ] TASK-12 Implement the threshold controller.
+  - Acceptance: four deterministic cooling stages implement the documented 30/35/40 C boundaries and reject invalid thresholds/flows.
+  - Verify: `python -m pytest tests/test_threshold_controller.py`.
+  - Dependencies: TASK-11.
+- [ ] TASK-13 Implement the PID controller.
+  - Acceptance: maximum pack temperature drives bounded proportional/integral/derivative action; nonmonotonic state time is rejected; reset restores initial behavior.
+  - Verify: `python -m pytest tests/test_pid_controller.py`.
+  - Dependencies: TASK-11.
+- [ ] TASK-14 Implement pump power and energy.
+  - Acceptance: `P = k * flow^3` and `E = P * dt` are validated, monotonic, and unit-tested.
+  - Verify: `python -m pytest tests/test_control_objective.py`.
+  - Dependencies: TASK-11.
+- [ ] TASK-15 Reconcile Phase 3 exports and integration.
+  - Acceptance: both controllers satisfy the protocol, stay within the configured flow interval, and execute deterministic closed-loop simulations.
+  - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests`.
+  - Dependencies: TASK-12, TASK-13, TASK-14.
+- [ ] Checkpoint P3: baseline BTMS accepted and ready for experiment-framework work.
+
+## Phase 4
+
+- [ ] TASK-16 Implement experiment metrics.
+  - Acceptance: peak/mean temperature, maximum spread, pump energy, violating sample count, and time above limit are calculated from explicit post-step records.
+  - Verify: `python -m pytest tests/test_metrics.py`.
+  - Dependencies: TASK-15.
+- [ ] TASK-17 Freeze experiment contracts.
+  - Acceptance: scenario, post-step record, and result types are immutable, validate durations/units/provenance, and carry structured metrics.
+  - Verify: `python -m pytest tests/test_experiment_types.py`.
+  - Dependencies: TASK-16.
+- [ ] TASK-18 Implement the experiment runner.
+  - Acceptance: the runner resets controller/environment, applies one action per exact timestep, records post-step truth, computes metrics, and repeats deterministically.
+  - Verify: `python -m pytest tests/test_experiment_runner.py`.
+  - Dependencies: TASK-17.
+- [ ] TASK-19 Implement non-overwriting result serialization.
+  - Acceptance: validated run IDs produce trace CSV, metrics JSON, and provenance JSON; existing destinations and path-like identifiers are rejected.
+  - Verify: `python -m pytest tests/test_experiment_serialization.py`.
+  - Dependencies: TASK-17.
+- [ ] TASK-20 Add baseline experiment integration.
+  - Acceptance: `scripts/run_baseline.py` compares controllers under the same scenario, seed, initial state, and duration and emits only measured results.
+  - Verify: `python scripts/run_baseline.py --smoke-test` plus full quality gates.
+  - Dependencies: TASK-18, TASK-19.
+- [ ] Checkpoint P4: reproducible controller experiments and artifacts accepted.
+
+## Phase 5
+
+- [ ] TASK-21 Add optional per-cell initial resistance configuration.
+  - Acceptance: scalar nominal resistance remains default; optional positive finite tuples are immutable and pack-length checked by reset.
+  - Verify: `python -m pytest tests/test_types.py tests/test_environment.py`.
+  - Dependencies: TASK-20.
+- [ ] TASK-22 Freeze dataset and sampling contracts.
+  - Acceptance: scenario and transition records preserve state/action/next-state provenance; sampling ranges are explicit, validated, and represented in YAML.
+  - Verify: `python -m pytest tests/test_data_types.py`.
+  - Dependencies: TASK-21.
+- [ ] TASK-23 Implement the deterministic parameter sampler.
+  - Acceptance: sampling varies initial state, current profile, flow, resistance, thermal coupling, and cooling effectiveness within declared ranges and is stable per seed/index.
+  - Verify: `python -m pytest tests/test_sampling.py`.
+  - Dependencies: TASK-22.
+- [ ] TASK-24 Implement trajectory generation.
+  - Acceptance: every transition is produced by `BatteryEnvironment`, is contiguous, uses the sampled action, and carries trajectory metadata without simulator-truth leakage into controllers.
+  - Verify: `python -m pytest tests/test_data_generate.py`.
+  - Dependencies: TASK-22.
+- [ ] TASK-25 Implement trajectory-level split and persistence.
+  - Acceptance: train/validation/test trajectory IDs are disjoint, seeded splits are deterministic, flattened rows retain all 12 cell states, and files never silently overwrite.
+  - Verify: `python -m pytest tests/test_dataset.py`.
+  - Dependencies: TASK-22.
+- [ ] TASK-26 Add dataset-generation CLI integration.
+  - Acceptance: smoke mode generates a small deterministic three-way dataset and manifest under a caller-selected output directory.
+  - Verify: `python scripts/generate_dataset.py --smoke-test`.
+  - Dependencies: TASK-23, TASK-24, TASK-25.
+- [ ] TASK-27 Perform the Phase 3-5 integration audit.
+  - Acceptance: all focused and repository quality gates pass; baseline and dataset smoke paths execute; dependency direction and result integrity are reviewed.
+  - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests`; both smoke scripts.
+  - Dependencies: TASK-26.
+- [ ] Checkpoint P5: Phase 3-5 accepted and ready for data-driven model work.

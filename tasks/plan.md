@@ -1,8 +1,8 @@
-# Implementation Plan: ThermoTwin Phases 0-2
+# Implementation Plan: ThermoTwin Phases 0-5
 
 ## Overview
 
-Build the tested foundation, shared contracts, minimal 12-cell electrothermal simulator, and deterministic current-profile generators required by `PLAN.md` Phases 0 through 2. `AGENTS.md` is authoritative where project documents conflict.
+Build the tested foundation through a reproducible baseline-controller experiment and leakage-safe synthetic transition dataset required by `PLAN.md` Phases 0 through 5. `AGENTS.md` is authoritative where project documents conflict.
 
 ## Frozen Architecture Decisions
 
@@ -14,6 +14,10 @@ Build the tested foundation, shared contracts, minimal 12-cell electrothermal si
 - `BatteryEnvironment` is the authoritative simulator and has no dependency on ML, control, diagnostics, or visualization.
 - Environment thermal balance includes Joule heating, neighbor conduction, liquid cooling, and ambient exchange. Forward Euler is sufficient for the MVP, with explicit positive-`dt` validation.
 - Pack adjacency is defined once in `physics/topology.py` and consumed by simulator physics.
+- Controllers share a runtime-checkable `Controller` protocol with `reset()` and `act(state)` so stateful controllers can be reused fairly across experiments.
+- Experiment traces contain one immutable post-step record per applied action. Pump energy is integrated over those records, and result serialization refuses to overwrite an existing run.
+- Dataset samples are immutable `(state_t, action_t, state_t+1)` transitions. Dataset splitting is performed only on whole trajectory identifiers.
+- Phase 5 may configure initial per-cell resistances, but time-varying fault injection and fault labels remain Phase 10 responsibilities.
 
 ## Dependency DAG
 
@@ -29,6 +33,23 @@ TASK-00 repository bootstrap
               -> TASK-08 deterministic drive profiles
               -> TASK-09 deterministic charging profile
                   -> TASK-10 Phase 0-2 integration audit
+                      -> TASK-11 controller contract
+                          -> TASK-12 threshold controller
+                          -> TASK-13 PID controller
+                          -> TASK-14 pump-energy model
+                              -> TASK-15 Phase 3 integration
+                                  -> TASK-16 experiment metrics
+                                      -> TASK-17 experiment contracts
+                                          -> TASK-18 experiment runner
+                                          -> TASK-19 result serialization
+                                              -> TASK-20 Phase 4 integration
+                                                  -> TASK-21 initial resistance contract
+                                                      -> TASK-22 dataset contracts
+                                                          -> TASK-23 parameter sampler
+                                                          -> TASK-24 trajectory generator
+                                                          -> TASK-25 trajectory split and persistence
+                                                              -> TASK-26 dataset CLI integration
+                                                                  -> TASK-27 Phase 3-5 audit
 ```
 
 Tasks with disjoint files may run concurrently only after their shared dependency is accepted. No concurrent task may modify the same file.
@@ -58,6 +79,35 @@ Tasks with disjoint files may run concurrently only after their shared dependenc
 - TASK-10: Run the Phase 0-2 integration audit and update task status.
 - Checkpoint P2: full suite, Ruff, mypy, and a profile-driven simulator smoke run pass.
 
+### Phase 3: Baseline BTMS
+
+- TASK-11: Freeze the controller protocol and illustrative controller configuration.
+- TASK-12: Implement the four-stage threshold controller with exact boundary tests.
+- TASK-13: Implement a resettable, bounded PID controller targeting pack maximum temperature.
+- TASK-14: Implement the configurable cubic pump-power and energy approximation.
+- TASK-15: Reconcile control-package exports and run a closed-loop controller comparison smoke test.
+- Checkpoint P3: threshold and PID actions always remain legal; reset restores PID determinism; pump calculations have explicit SI units; full quality gates pass.
+
+### Phase 4: Experiment Framework
+
+- TASK-16: Implement experiment metric calculation over post-step records.
+- TASK-17: Freeze validated immutable experiment scenario, record, and result contracts.
+- TASK-18: Implement `run_experiment(scenario, controller, seed)` using only public simulator/controller interfaces.
+- TASK-19: Persist traces, metrics, and provenance as CSV/JSON in a new non-overwriting run directory.
+- TASK-20: Add the baseline smoke script and verify identical-scenario fairness across controllers.
+- Checkpoint P4: repeated runs are deterministic; controller comparison shares the same scenario and initial state; saved artifacts round-trip without invented values.
+
+### Phase 5: Synthetic Dataset Generation
+
+- TASK-21: Extend initial-condition contracts with optional validated per-cell resistances.
+- TASK-22: Freeze immutable dataset scenario and transition-record contracts plus explicit sampling ranges.
+- TASK-23: Implement deterministic parameter sampling for state, load, cooling, resistance, coupling, and cooling effectiveness.
+- TASK-24: Generate authoritative simulator transitions as `(state_t, action_t, state_t+1)` records.
+- TASK-25: Split exclusively by trajectory and persist flat train/validation/test CSV files with a manifest.
+- TASK-26: Add `scripts/generate_dataset.py --smoke-test` and verify reproducible artifact generation.
+- TASK-27: Run the Phase 3-5 repository audit and update task status.
+- Checkpoint P5: no trajectory crosses split boundaries; smoke generation is deterministic; full pytest, Ruff, mypy, baseline, and dataset smoke commands pass.
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
@@ -68,9 +118,14 @@ Tasks with disjoint files may run concurrently only after their shared dependenc
 | Scenario nondeterminism | Medium | Pure time-indexed functions and repeatability tests |
 | Physics duplication later in ML | Medium | Keep equations in small canonical physics functions |
 | Worker collisions | High | Exact file whitelists and sequential shared-file reconciliation |
+| Stateful-controller carryover | High | Require `reset()` and test repeated-run determinism |
+| Metric ambiguity | High | Name units and define violations as post-step samples plus elapsed seconds |
+| Artifact overwrite/path escape | High | Validate run IDs and reject existing destinations |
+| Temporal leakage | High | Split immutable transitions by trajectory ID only |
+| Sampling drift | Medium | Seed per trajectory index and persist sampled metadata |
 
-## Open Questions Deferred Beyond Phase 2
+## Open Questions Deferred Beyond Phase 5
 
-- Final YAML loading/override strategy for experiment and training configuration.
 - Differentiable backend strategy for reusing canonical equations in PyTorch physics loss.
-- Controller and forecaster interfaces beyond the already documented contracts.
+- Model normalization and checkpoint schema for Phase 6.
+- Forecaster state/action representation for Phase 8.
