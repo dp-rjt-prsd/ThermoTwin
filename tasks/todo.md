@@ -10,11 +10,11 @@
   - Acceptance: explicit-unit state/action/config dataclasses validate shapes, ranges, and flow bounds; defaults describe a 3x4 pack.
   - Verify: `python -m pytest tests/test_types.py`.
   - Dependencies: TASK-00.
-- [ ] TASK-02 Implement canonical rectangular topology.
+- [x] TASK-02 Implement canonical rectangular topology.
   - Acceptance: 3x4 grid yields 12 cells and 17 unique undirected edges in deterministic order; invalid dimensions fail.
   - Verify: `python -m pytest tests/test_topology.py`.
   - Dependencies: TASK-01.
-- [ ] Checkpoint P0: full pytest, Ruff, and mypy pass.
+- [x] Checkpoint P0: full pytest, Ruff, and mypy pass.
 
 ## Phase 1
 
