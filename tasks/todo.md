@@ -30,7 +30,7 @@
   - Acceptance: coefficient and heat removal increase monotonically with legal flow; signs reverse correctly across coolant/ambient temperatures.
   - Verify: `python -m pytest tests/test_cooling.py`.
   - Dependencies: TASK-01.
-- [ ] TASK-06 Implement signed-current coulomb counting.
+- [x] TASK-06 Implement signed-current coulomb counting.
   - Acceptance: discharge lowers SOC, charge raises SOC, zero current preserves SOC, and bounds are respected.
   - Verify: `python -m pytest tests/test_electrical.py`.
   - Dependencies: TASK-01.
