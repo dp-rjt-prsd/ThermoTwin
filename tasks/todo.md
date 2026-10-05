@@ -18,7 +18,7 @@
 
 ## Phase 1
 
-- [ ] TASK-03 Implement Joule heating and isolated-cell thermal integration.
+- [x] TASK-03 Implement Joule heating and isolated-cell thermal integration.
   - Acceptance: zero current, current-squared scaling, resistance scaling, and analytical temperature update are tested.
   - Verify: `python -m pytest tests/test_cell.py`.
   - Dependencies: TASK-01.
