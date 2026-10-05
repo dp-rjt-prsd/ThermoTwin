@@ -46,7 +46,7 @@
 
 ## Phase 2
 
-- [ ] TASK-08 Implement deterministic drive profiles.
+- [x] TASK-08 Implement deterministic drive profiles.
   - Acceptance: constant, pulse, stop-and-go, and aggressive profiles obey duration/current contracts and are repeatable.
   - Verify: `python -m pytest tests/test_drive_cycles.py`.
   - Dependencies: TASK-07.
