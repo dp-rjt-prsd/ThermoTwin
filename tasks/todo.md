@@ -2,7 +2,7 @@
 
 ## Phase 0
 
-- [ ] TASK-00 Bootstrap package and quality tooling.
+- [x] TASK-00 Bootstrap package and quality tooling.
   - Acceptance: Python package imports; pytest discovers a smoke test; `.gitignore`, metadata, dependency groups, Ruff, and mypy configuration exist.
   - Verify: `python -m pytest tests/test_package.py`; `python -m ruff check .`; `python -m mypy src tests`.
   - Dependencies: none.

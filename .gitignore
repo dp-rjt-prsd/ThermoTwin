@@ -1,0 +1,38 @@
+# Python environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python caches and coverage
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build and package artifacts
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.yaml
+secrets.yml
+
+# Generated datasets, model checkpoints, and experiment results
+data/generated/**
+!data/generated/.gitkeep
+checkpoints/**
+!checkpoints/.gitkeep
+results/**
+!results/.gitkeep
