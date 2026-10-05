@@ -26,7 +26,7 @@
   - Acceptance: equal temperatures exchange no heat; heat flows hot to cold; net pairwise energy is zero.
   - Verify: `python -m pytest tests/test_pack.py`.
   - Dependencies: TASK-02.
-- [ ] TASK-05 Implement flow-dependent cooling and ambient exchange.
+- [x] TASK-05 Implement flow-dependent cooling and ambient exchange.
   - Acceptance: coefficient and heat removal increase monotonically with legal flow; signs reverse correctly across coolant/ambient temperatures.
   - Verify: `python -m pytest tests/test_cooling.py`.
   - Dependencies: TASK-01.
