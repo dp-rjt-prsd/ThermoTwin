@@ -10,6 +10,10 @@
   - Acceptance: explicit-unit state/action/config dataclasses validate shapes, ranges, and flow bounds; defaults describe a 3x4 pack.
   - Verify: `python -m pytest tests/test_types.py`.
   - Dependencies: TASK-00.
+- [x] TASK-01A Add optional validated per-cell initial temperatures for public environment setup.
+  - Acceptance: scalar initialization remains the default; tuple override is immutable, positive, finite, and length-checked later by the environment against pack size.
+  - Verify: `python -m pytest tests/test_types.py`.
+  - Dependencies: TASK-01.
 - [x] TASK-02 Implement canonical rectangular topology.
   - Acceptance: 3x4 grid yields 12 cells and 17 unique undirected edges in deterministic order; invalid dimensions fail.
   - Verify: `python -m pytest tests/test_topology.py`.

@@ -143,6 +143,46 @@ def test_simulation_config_rejects_invalid_values(field: str, value: float) -> N
         make_simulation(**{field: value})
 
 
+def test_simulation_config_defaults_to_scalar_temperature_initialization() -> None:
+    config = make_simulation()
+
+    assert config.initial_cell_temperatures_k is None
+
+
+def test_simulation_config_normalizes_nonuniform_initial_temperatures() -> None:
+    config = make_simulation(initial_cell_temperatures_k=(298, 299.5))
+
+    temperatures = config.initial_cell_temperatures_k
+    assert temperatures == (298.0, 299.5)
+    assert temperatures is not None
+    assert all(type(value) is float for value in temperatures)
+    with pytest.raises(FrozenInstanceError):
+        config.initial_cell_temperatures_k = (297.0, 298.0)  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    "temperatures",
+    [
+        [],
+        "298.15",
+        (),
+        (True,),
+        ("298.15",),
+        (1j,),
+        (0.0,),
+        (-1.0,),
+        (float("nan"),),
+        (float("inf"),),
+        (-float("inf"),),
+    ],
+)
+def test_simulation_config_rejects_invalid_nonuniform_initial_temperatures(
+    temperatures: Any,
+) -> None:
+    with pytest.raises(ValueError, match="initial_cell_temperatures_k"):
+        make_simulation(initial_cell_temperatures_k=temperatures)
+
+
 def make_state(
     temperatures: Any = None,
     resistances: Any = None,
@@ -272,3 +312,4 @@ def test_pack_and_simulation_yaml_load_into_environment_config() -> None:
     assert config.simulation.ambient_temperature_k == 298.15
     assert config.simulation.coolant_inlet_temperature_k == 293.15
     assert config.simulation.initial_current_a == 0.0
+    assert config.simulation.initial_cell_temperatures_k is None

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from numbers import Integral
+from numbers import Integral, Real
 from typing import Any
 
 import numpy as np
@@ -58,6 +58,22 @@ def _readonly_positive_vector(name: str, value: Any) -> FloatArray:
 
     # Back the stored view with immutable bytes so callers cannot re-enable writes.
     return np.frombuffer(array.tobytes(), dtype=np.float64)
+
+
+def _normalize_positive_temperature_tuple(value: object) -> tuple[float, ...]:
+    field_name = "initial_cell_temperatures_k"
+    if not isinstance(value, tuple) or not value:
+        raise ValueError(f"{field_name} must be a nonempty tuple or None")
+
+    normalized: list[float] = []
+    for temperature in value:
+        if isinstance(temperature, bool) or not isinstance(temperature, Real):
+            raise ValueError(f"{field_name} must contain positive finite real values")
+        normalized_temperature = float(temperature)
+        if not math.isfinite(normalized_temperature) or normalized_temperature <= 0.0:
+            raise ValueError(f"{field_name} must contain positive finite real values")
+        normalized.append(normalized_temperature)
+    return tuple(normalized)
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +196,7 @@ class SimulationConfig:
     ambient_temperature_k: float
     coolant_inlet_temperature_k: float
     initial_current_a: float
+    initial_cell_temperatures_k: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         _require_positive("default_time_step_s", self.default_time_step_s)
@@ -191,6 +208,14 @@ class SimulationConfig:
         ):
             _require_positive(name, getattr(self, name))
         _require_finite("initial_current_a", self.initial_current_a)
+
+        temperatures = self.initial_cell_temperatures_k
+        if temperatures is not None:
+            object.__setattr__(
+                self,
+                "initial_cell_temperatures_k",
+                _normalize_positive_temperature_tuple(temperatures),
+            )
 
 
 @dataclass(frozen=True, slots=True)

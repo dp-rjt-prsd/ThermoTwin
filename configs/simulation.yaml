@@ -6,3 +6,4 @@ simulation:
   ambient_temperature_k: 298.15
   coolant_inlet_temperature_k: 293.15
   initial_current_a: 0.0
+  initial_cell_temperatures_k: null
