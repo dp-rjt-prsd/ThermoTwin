@@ -38,11 +38,11 @@
   - Acceptance: discharge lowers SOC, charge raises SOC, zero current preserves SOC, and bounds are respected.
   - Verify: `python -m pytest tests/test_electrical.py`.
   - Dependencies: TASK-01.
-- [ ] TASK-07 Integrate `BatteryEnvironment`.
+- [x] TASK-07 Integrate `BatteryEnvironment`.
   - Acceptance: reset/step satisfy frozen contracts; all heat terms and SOC are integrated; action and timestep bounds are enforced; deterministic runs match.
   - Verify: `python -m pytest tests/test_environment.py`.
   - Dependencies: TASK-03, TASK-04, TASK-05, TASK-06.
-- [ ] Checkpoint P1: full pytest, Ruff, mypy, and deterministic physical sanity run pass.
+- [x] Checkpoint P1: full pytest, Ruff, mypy, and deterministic physical sanity run pass.
 
 ## Phase 2
 
