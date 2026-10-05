@@ -22,7 +22,7 @@
   - Acceptance: zero current, current-squared scaling, resistance scaling, and analytical temperature update are tested.
   - Verify: `python -m pytest tests/test_cell.py`.
   - Dependencies: TASK-01.
-- [ ] TASK-04 Implement conservative neighbor conduction.
+- [x] TASK-04 Implement conservative neighbor conduction.
   - Acceptance: equal temperatures exchange no heat; heat flows hot to cold; net pairwise energy is zero.
   - Verify: `python -m pytest tests/test_pack.py`.
   - Dependencies: TASK-02.
