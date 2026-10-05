@@ -1,0 +1,30 @@
+# Illustrative prototype assumptions, not manufacturer data.
+
+threshold_controller:
+  # Strictly ascending boundaries define these exact temperature bands:
+  # Tmax < 303.15 K; 303.15 <= Tmax < 308.15 K;
+  # 308.15 <= Tmax < 313.15 K; Tmax >= 313.15 K.
+  temperature_boundaries_k: [303.15, 308.15, 313.15]
+  # Flows map in order to minimum, low, medium, and maximum bands.
+  stages:
+    - name: minimum
+      coolant_mass_flow_kg_s: 0.0
+    - name: low
+      coolant_mass_flow_kg_s: 0.025
+    - name: medium
+      coolant_mass_flow_kg_s: 0.06
+    - name: maximum
+      coolant_mass_flow_kg_s: 0.1
+
+pid_controller:
+  target_temperature_k: 308.15
+  kp_kg_s_k: 0.005
+  ki_kg_s_k_s: 0.0001
+  kd_kg_s_k_per_s: 0.0
+  minimum_coolant_mass_flow_kg_s: 0.0
+  maximum_coolant_mass_flow_kg_s: 0.1
+
+thermal_safety_limit_k: 313.15
+
+# Cubic approximation: pump_power_w = coefficient * flow_kg_s ** 3.
+pump_power_coefficient_w_s3_kg3: 100000.0

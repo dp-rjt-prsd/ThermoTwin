@@ -62,7 +62,7 @@
 
 ## Phase 3
 
-- [ ] TASK-11 Freeze the controller protocol and controller YAML.
+- [x] TASK-11 Freeze the controller protocol and controller YAML.
   - Acceptance: runtime-checkable controllers expose `reset()` and `act(BatteryState) -> CoolingAction`; illustrative thresholds, PID gains, flow limits, safety temperature, and pump coefficient are explicit configuration.
   - Verify: `python -m pytest tests/test_control_base.py`.
   - Dependencies: TASK-10.
