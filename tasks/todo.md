@@ -50,7 +50,7 @@
   - Acceptance: constant, pulse, stop-and-go, and aggressive profiles obey duration/current contracts and are repeatable.
   - Verify: `python -m pytest tests/test_drive_cycles.py`.
   - Dependencies: TASK-07.
-- [ ] TASK-09 Implement deterministic fast-charging profile.
+- [x] TASK-09 Implement deterministic fast-charging profile.
   - Acceptance: charging current follows the negative-current convention, tapers safely, obeys duration, and is repeatable.
   - Verify: `python -m pytest tests/test_charging.py`.
   - Dependencies: TASK-07.
