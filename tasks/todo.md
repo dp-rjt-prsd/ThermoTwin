@@ -54,8 +54,8 @@
   - Acceptance: charging current follows the negative-current convention, tapers safely, obeys duration, and is repeatable.
   - Verify: `python -m pytest tests/test_charging.py`.
   - Dependencies: TASK-07.
-- [ ] TASK-10 Perform integration audit.
+- [x] TASK-10 Perform integration audit.
   - Acceptance: full suite, Ruff, mypy, and a profile-driven simulator smoke run pass; no dependency-direction violations are found.
   - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests`.
   - Dependencies: TASK-08, TASK-09.
-- [ ] Checkpoint P2: Phase 0-2 accepted and ready for baseline-controller work.
+- [x] Checkpoint P2: Phase 0-2 accepted and ready for baseline-controller work.
