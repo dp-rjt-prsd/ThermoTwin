@@ -73,6 +73,42 @@ def test_reset_rejects_per_cell_temperature_count_that_does_not_match_pack() -> 
         environment.reset(make_config(initial_cell_temperatures_k=(300.0,)))
 
 
+def test_reset_uses_configured_nonuniform_initial_resistances_in_cell_order() -> None:
+    environment = BatteryEnvironment(lambda _: 0.0)
+
+    state = environment.reset(
+        make_config(initial_cell_resistances_ohm=(0.25, 0.75))
+    )
+
+    np.testing.assert_array_equal(state.cell_resistances_ohm, [0.25, 0.75])
+    assert not state.cell_resistances_ohm.flags.writeable
+    with pytest.raises(ValueError):
+        state.cell_resistances_ohm[0] = 1.0
+
+
+def test_reset_rejects_resistance_count_mismatch_before_installing_state() -> None:
+    environment = BatteryEnvironment(lambda _: 0.0)
+    original_state = environment.reset(make_config())
+
+    with pytest.raises(ValueError, match="initial_cell_resistances_ohm"):
+        environment.reset(make_config(initial_cell_resistances_ohm=(0.5,)))
+
+    assert environment.state is original_state
+
+
+def test_higher_initial_cell_resistance_increases_its_joule_heating() -> None:
+    environment = BatteryEnvironment(lambda _: 2.0)
+    environment.reset(make_config(initial_cell_resistances_ohm=(0.5, 1.0)))
+
+    state = environment.step(CoolingAction(0.0), 1.0)
+
+    # With 2 A, the cells receive 2 W and 4 W respectively; their
+    # 10 J/K thermal capacitance gives a 0.2 K temperature difference.
+    assert state.cell_temperatures_k[1] - state.cell_temperatures_k[0] == pytest.approx(
+        0.2
+    )
+
+
 def test_zero_current_and_uniform_temperatures_remain_at_equilibrium() -> None:
     environment = BatteryEnvironment(lambda _: 0.0)
     environment.reset(make_config())

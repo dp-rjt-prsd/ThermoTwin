@@ -110,7 +110,7 @@
 
 ## Phase 5
 
-- [ ] TASK-21 Add optional per-cell initial resistance configuration.
+- [x] TASK-21 Add optional per-cell initial resistance configuration.
   - Acceptance: scalar nominal resistance remains default; optional positive finite tuples are immutable and pack-length checked by reset.
   - Verify: `python -m pytest tests/test_types.py tests/test_environment.py`.
   - Dependencies: TASK-20.

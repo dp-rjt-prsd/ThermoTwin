@@ -147,6 +147,7 @@ def test_simulation_config_defaults_to_scalar_temperature_initialization() -> No
     config = make_simulation()
 
     assert config.initial_cell_temperatures_k is None
+    assert config.initial_cell_resistances_ohm is None
 
 
 def test_simulation_config_normalizes_nonuniform_initial_temperatures() -> None:
@@ -181,6 +182,40 @@ def test_simulation_config_rejects_invalid_nonuniform_initial_temperatures(
 ) -> None:
     with pytest.raises(ValueError, match="initial_cell_temperatures_k"):
         make_simulation(initial_cell_temperatures_k=temperatures)
+
+
+def test_simulation_config_normalizes_nonuniform_initial_resistances() -> None:
+    config = make_simulation(initial_cell_resistances_ohm=(0.015, np.float64(0.02)))
+
+    resistances = config.initial_cell_resistances_ohm
+    assert resistances == (0.015, 0.02)
+    assert resistances is not None
+    assert all(type(value) is float for value in resistances)
+    with pytest.raises(FrozenInstanceError):
+        config.initial_cell_resistances_ohm = (0.01, 0.02)  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    "resistances",
+    [
+        [],
+        "0.015",
+        (),
+        (True,),
+        ("0.015",),
+        (1j,),
+        (0.0,),
+        (-0.01,),
+        (float("nan"),),
+        (float("inf"),),
+        (-float("inf"),),
+    ],
+)
+def test_simulation_config_rejects_invalid_nonuniform_initial_resistances(
+    resistances: Any,
+) -> None:
+    with pytest.raises(ValueError, match="initial_cell_resistances_ohm"):
+        make_simulation(initial_cell_resistances_ohm=resistances)
 
 
 def make_state(
@@ -313,3 +348,4 @@ def test_pack_and_simulation_yaml_load_into_environment_config() -> None:
     assert config.simulation.coolant_inlet_temperature_k == 293.15
     assert config.simulation.initial_current_a == 0.0
     assert config.simulation.initial_cell_temperatures_k is None
+    assert config.simulation.initial_cell_resistances_ohm is None

@@ -60,19 +60,20 @@ def _readonly_positive_vector(name: str, value: Any) -> FloatArray:
     return np.frombuffer(array.tobytes(), dtype=np.float64)
 
 
-def _normalize_positive_temperature_tuple(value: object) -> tuple[float, ...]:
-    field_name = "initial_cell_temperatures_k"
+def _normalize_positive_real_tuple(
+    value: object, field_name: str
+) -> tuple[float, ...]:
     if not isinstance(value, tuple) or not value:
         raise ValueError(f"{field_name} must be a nonempty tuple or None")
 
     normalized: list[float] = []
-    for temperature in value:
-        if isinstance(temperature, bool) or not isinstance(temperature, Real):
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, Real):
             raise ValueError(f"{field_name} must contain positive finite real values")
-        normalized_temperature = float(temperature)
-        if not math.isfinite(normalized_temperature) or normalized_temperature <= 0.0:
+        normalized_item = float(item)
+        if not math.isfinite(normalized_item) or normalized_item <= 0.0:
             raise ValueError(f"{field_name} must contain positive finite real values")
-        normalized.append(normalized_temperature)
+        normalized.append(normalized_item)
     return tuple(normalized)
 
 
@@ -197,6 +198,7 @@ class SimulationConfig:
     coolant_inlet_temperature_k: float
     initial_current_a: float
     initial_cell_temperatures_k: tuple[float, ...] | None = None
+    initial_cell_resistances_ohm: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         _require_positive("default_time_step_s", self.default_time_step_s)
@@ -214,7 +216,19 @@ class SimulationConfig:
             object.__setattr__(
                 self,
                 "initial_cell_temperatures_k",
-                _normalize_positive_temperature_tuple(temperatures),
+                _normalize_positive_real_tuple(
+                    temperatures, "initial_cell_temperatures_k"
+                ),
+            )
+
+        resistances = self.initial_cell_resistances_ohm
+        if resistances is not None:
+            object.__setattr__(
+                self,
+                "initial_cell_resistances_ohm",
+                _normalize_positive_real_tuple(
+                    resistances, "initial_cell_resistances_ohm"
+                ),
             )
 
 

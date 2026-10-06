@@ -76,11 +76,19 @@ class BatteryEnvironment:
                 )
             temperatures = np.asarray(initial_temperatures, dtype=np.float64)
 
-        resistances = np.full(
-            config.pack.cell_count,
-            config.pack.nominal_cell_resistance_ohm,
-            dtype=np.float64,
-        )
+        initial_resistances = simulation.initial_cell_resistances_ohm
+        if initial_resistances is None:
+            resistances = np.full(
+                config.pack.cell_count,
+                config.pack.nominal_cell_resistance_ohm,
+                dtype=np.float64,
+            )
+        else:
+            if len(initial_resistances) != config.pack.cell_count:
+                raise ValueError(
+                    "initial_cell_resistances_ohm length must match pack.cell_count"
+                )
+            resistances = np.asarray(initial_resistances, dtype=np.float64)
         state = BatteryState(
             time_s=0.0,
             current_a=self._current_profile(0.0),
