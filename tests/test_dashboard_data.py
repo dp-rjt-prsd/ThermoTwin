@@ -16,8 +16,8 @@ METRICS = {
     "mean_temperature_k": 300.5,
     "maximum_temperature_spread_k": 0.0,
     "pump_energy_j": 2.0,
-    "thermal_violation_count": 0,
-    "time_above_thermal_limit_s": 0.0,
+    "thermal_violation_count": 1,
+    "time_above_thermal_limit_s": 1.0,
 }
 RUNS = {
     "threshold": "reactive_threshold",
@@ -45,7 +45,7 @@ def _scenario() -> dict[str, object]:
         "name": "dashboard-test",
         "duration_s": 2.0,
         "time_step_s": 1.0,
-        "thermal_limit_k": 320.0,
+        "thermal_limit_k": 300.5,
         "pump_power_coefficient_w_s3_kg3": 10.0,
     }
 
@@ -114,7 +114,11 @@ def _fault_artifacts(root: Path) -> None:
     _write_json(fault / "anomaly_events.json", [])
     provenance = {
         "schema_version": "1.0",
-        "scenario": {**_scenario(), "duration_s": 3.0},
+        "scenario": {
+            **_scenario(),
+            "duration_s": 3.0,
+            "thermal_limit_k": 320.0,
+        },
         "environment_config": {"pack": {"rows": 3, "columns": 4}},
         "scenario_metadata": {"profile": "test"},
         "controller_class_name": "test-controller",
@@ -262,6 +266,7 @@ def test_loads_valid_artifacts_and_returns_immutable_data(tmp_path: Path) -> Non
     trace = data.controller_traces["threshold"]
     assert trace.cell_temperatures_k.shape == (2, 12)
     assert trace.cell_temperatures_k.dtype == np.float64
+    assert data.controller_traces["predictive_data_only"].thermal_limit_k == 300.5
     with pytest.raises(ValueError):
         trace.cell_temperatures_k[0, 0] = 0.0
     with pytest.raises(TypeError):
@@ -314,6 +319,8 @@ def test_accepts_fault_run_directory_directly(tmp_path: Path) -> None:
         "fault_trace_conflict",
         "fault_record_count",
         "trace_metrics",
+        "scenario_thermal_limit_string",
+        "scenario_thermal_limit_zero",
         "extra_fixed_field",
         "extra_fault_provenance_field",
         "fault_schema_version",
@@ -373,6 +380,13 @@ def test_rejects_invalid_artifacts(tmp_path: Path, mutation: str) -> None:
         provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
         provenance["seed"] = 8
         _write_json(provenance_path, provenance)
+    elif mutation in ("scenario_thermal_limit_string", "scenario_thermal_limit_zero"):
+        thermal_limit: object = "300.5" if mutation.endswith("string") else 0.0
+        for run_id in RUNS:
+            provenance_path = predictive / run_id / "provenance.json"
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            provenance["scenario"]["thermal_limit_k"] = thermal_limit
+            _write_json(provenance_path, provenance)
     elif mutation == "fault_trace_conflict":
         with (fault / "fault-detection" / "timeseries.csv").open(
             encoding="utf-8", newline=""
@@ -422,7 +436,7 @@ def test_rejects_invalid_artifacts(tmp_path: Path, mutation: str) -> None:
         (ValueError, FileNotFoundError),
         match=(
             "(?i)(artifact|field|path|json|metrics|time|source|lead|truth|"
-            "schema|trace|missing|duplicate|finite)"
+            "schema|trace|missing|duplicate|finite|positive)"
         ),
     ):
         load_dashboard_data(predictive, fault)

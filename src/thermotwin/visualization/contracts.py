@@ -29,6 +29,7 @@ class ControllerTrace:
     pump_power_w: FloatArray
     cell_temperatures_k: FloatArray
     cell_resistances_ohm: FloatArray
+    thermal_limit_k: float
     metrics: Mapping[str, float | int]
 
     def __post_init__(self) -> None:
@@ -67,10 +68,14 @@ class ControllerTrace:
             vectors["soc_fraction"] > 1.0
         ):
             raise ValueError("controller soc_fraction must be in [0, 1]")
+        thermal_limit = finite(self.thermal_limit_k, "thermal_limit_k", minimum=0.0)
+        if thermal_limit <= 0.0:
+            raise ValueError("thermal_limit_k must be positive")
         for name, value in vectors.items():
             object.__setattr__(self, name, value)
         object.__setattr__(self, "cell_temperatures_k", temperatures)
         object.__setattr__(self, "cell_resistances_ohm", resistances)
+        object.__setattr__(self, "thermal_limit_k", thermal_limit)
         object.__setattr__(
             self,
             "metrics",

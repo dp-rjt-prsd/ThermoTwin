@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
+from typing import cast
 
 import numpy as np
 import pytest
@@ -51,8 +53,15 @@ def _controller(label: str = "threshold") -> ControllerTrace:
         pump_power_w=np.array([1.0, 2.0, 3.0]),
         cell_temperatures_k=temperatures,
         cell_resistances_ohm=np.full((3, 12), 0.01),
+        thermal_limit_k=320.0,
         metrics=METRICS,
     )
+
+
+@pytest.mark.parametrize("thermal_limit", [0.0, -1.0, float("nan"), "320", True])
+def test_controller_trace_rejects_invalid_thermal_limit(thermal_limit: object) -> None:
+    with pytest.raises(ValueError, match="thermal_limit_k"):
+        replace(_controller(), thermal_limit_k=cast(float, thermal_limit))
 
 
 def _forecasts() -> Mapping[str, tuple[ForecastSnapshot, ...]]:

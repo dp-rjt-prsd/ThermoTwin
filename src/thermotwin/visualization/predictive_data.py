@@ -120,6 +120,12 @@ def _load_controller(
         raise ValueError(
             f"{run_id}/provenance.record_count differs from timeseries.csv"
         )
+    time_step = finite(
+        scenario.get("time_step_s"), "scenario.time_step_s", minimum=0.0
+    )
+    thermal_limit = finite(
+        scenario.get("thermal_limit_k"), "scenario.thermal_limit_k", minimum=0.0
+    )
     trace = ControllerTrace(
         label=label,
         time_s=number_column(rows, "time_s", minimum=0.0),
@@ -145,14 +151,14 @@ def _load_controller(
             "cell_resistances_ohm",
             positive=True,
         ),
+        thermal_limit_k=thermal_limit,
         metrics=summary_metrics,
     )
-    time_step = finite(scenario.get("time_step_s"), "scenario.time_step_s", minimum=0.0)
-    thermal_limit = finite(
-        scenario.get("thermal_limit_k"), "scenario.thermal_limit_k", minimum=0.0
-    )
     recomputed_metrics = recompute_metrics(
-        trace.cell_temperatures_k, trace.pump_power_w, time_step, thermal_limit
+        trace.cell_temperatures_k,
+        trace.pump_power_w,
+        time_step,
+        trace.thermal_limit_k,
     )
     if dict(recomputed_metrics) != dict(summary_metrics):
         raise ValueError(f"{run_id} saved metrics do not match its timeseries.csv")
