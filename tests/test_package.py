@@ -1,3 +1,6 @@
+import tomllib
+from pathlib import Path
+
 import thermotwin.models as models
 from thermotwin import __version__
 from thermotwin.data import (
@@ -115,6 +118,15 @@ from thermotwin.models.physics_train import (
 
 def test_package_exposes_initial_version() -> None:
     assert __version__ == "0.1.0"
+
+
+def test_package_declares_dashboard_runtime_dependencies() -> None:
+    project_file = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    with project_file.open("rb") as metadata_file:
+        project_metadata = tomllib.load(metadata_file)["project"]
+
+    assert "streamlit>=1.31" in project_metadata["dependencies"]
+    assert "plotly>=5.20" in project_metadata["dependencies"]
 
 
 def test_package_exposes_phase_six_data_api() -> None:
