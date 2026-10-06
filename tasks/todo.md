@@ -66,15 +66,15 @@
   - Acceptance: runtime-checkable controllers expose `reset()` and `act(BatteryState) -> CoolingAction`; illustrative thresholds, PID gains, flow limits, safety temperature, and pump coefficient are explicit configuration.
   - Verify: `python -m pytest tests/test_control_base.py`.
   - Dependencies: TASK-10.
-- [ ] TASK-12 Implement the threshold controller.
+- [x] TASK-12 Implement the threshold controller.
   - Acceptance: four deterministic cooling stages implement the documented 30/35/40 C boundaries and reject invalid thresholds/flows.
   - Verify: `python -m pytest tests/test_threshold_controller.py`.
   - Dependencies: TASK-11.
-- [ ] TASK-13 Implement the PID controller.
+- [x] TASK-13 Implement the PID controller.
   - Acceptance: maximum pack temperature drives bounded proportional/integral/derivative action; nonmonotonic state time is rejected; reset restores initial behavior.
   - Verify: `python -m pytest tests/test_pid_controller.py`.
   - Dependencies: TASK-11.
-- [ ] TASK-14 Implement pump power and energy.
+- [x] TASK-14 Implement pump power and energy.
   - Acceptance: `P = k * flow^3` and `E = P * dt` are validated, monotonic, and unit-tested.
   - Verify: `python -m pytest tests/test_control_objective.py`.
   - Dependencies: TASK-11.
