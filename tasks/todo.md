@@ -78,11 +78,11 @@
   - Acceptance: `P = k * flow^3` and `E = P * dt` are validated, monotonic, and unit-tested.
   - Verify: `python -m pytest tests/test_control_objective.py`.
   - Dependencies: TASK-11.
-- [ ] TASK-15 Reconcile Phase 3 exports and integration.
+- [x] TASK-15 Reconcile Phase 3 exports and integration.
   - Acceptance: both controllers satisfy the protocol, stay within the configured flow interval, and execute deterministic closed-loop simulations.
   - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests`.
   - Dependencies: TASK-12, TASK-13, TASK-14.
-- [ ] Checkpoint P3: baseline BTMS accepted and ready for experiment-framework work.
+- [x] Checkpoint P3: baseline BTMS accepted and ready for experiment-framework work.
 
 ## Phase 4
 
