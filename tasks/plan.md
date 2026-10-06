@@ -1,8 +1,8 @@
-# Implementation Plan: ThermoTwin Phases 0-8
+# Implementation Plan: ThermoTwin Phases 0-11
 
 ## Overview
 
-This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, and model-agnostic multi-step forecast engine for Phases 0-8. Phases 7-8 and their orchestrator integration audit are complete. `AGENTS.md` is authoritative where project documents conflict.
+This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, and model-agnostic multi-step forecast engine for Phases 0-8. Phases 9-11 add receding-horizon predictive cooling, simulator-owned resistance faults with persistent residual diagnostics, and an artifact-driven dashboard. `AGENTS.md` is authoritative where project documents conflict.
 
 ## Frozen Architecture Decisions
 
@@ -30,6 +30,11 @@ This plan records the implemented foundation through the reproducible baseline-c
 - OOD evaluation reuses normalization fitted on the in-distribution training split and never refits statistics on OOD artifacts.
 - Phase 8 forecasts autoregressively through a model-agnostic interface. Evaluation may supply recorded future exogenous conditions and actions, but never future cell temperatures; control defaults to persistence when future conditions are unavailable.
 - Forecast horizons are exact integer multiples of the trained model timestep. Evaluation reports physical-unit errors for the required 30, 60, and 120 second horizons over held-out trajectories.
+- Predictive control evaluates bounded constant-flow candidate sequences through the `ThermalForecaster` interface and applies only the first action. It cannot query simulator truth.
+- The predictive objective reports thermal peak, temperature spread, cubic pump energy, and safety penalty components with configurable nonnegative weights.
+- Resistance faults are immutable simulator configuration. The environment applies them at a configured cell and start time; controllers and anomaly detectors receive no fault label.
+- Anomaly detection compares measured temperatures with one-step forecasts, requires persistence across samples, and records detection cell, score, time, predicted hotspot, and severity.
+- Dashboard code consumes validated saved artifacts through visualization-layer loaders and contains no simulator or training logic.
 
 ## Dependency DAG
 
@@ -80,6 +85,12 @@ TASK-00 repository bootstrap
                                                                                                                                                             -> TASK-43 autoregressive rollout
                                                                                                                                                                 -> TASK-44 exact-horizon evaluation
                                                                                                                                                                     -> TASK-45 Phase 7-8 integration audit
+                                                                                                                                                                        +-> TASK-46 predictive-control contracts --+
+                                                                                                                                                                        +-> TASK-47 resistance-fault contract ------+--> TASK-49 Phase A audit
+                                                                                                                                                                        +-> TASK-48 dashboard dependencies ----------+        |
+                                                                                                                                                                                                                          +-> TASK-50 predictive objective -> TASK-51 predictive controller -> TASK-55 predictive comparison
+                                                                                                                                                                                                                          +-> TASK-52 simulator fault integration -> TASK-53 persistent anomaly detection -> TASK-54 lead-time metric -> TASK-56 fault workflow
+                                                                                                                                                                                                                                                                            TASK-55 + TASK-56 -> TASK-57 dashboard artifact model -> TASK-58 plots -> TASK-59 Streamlit dashboard -> TASK-60 Phase 9-11 audit
 ```
 
 Tasks with disjoint files may run concurrently only after their shared dependency is accepted. No concurrent task may modify the same file.
@@ -172,6 +183,33 @@ Phase 6 completion evidence: 875 pytest tests passed; Ruff and strict mypy check
 
 Phase 7-8 completion evidence: 1,000 pytest tests passed; Ruff and strict mypy checks passed; baseline, dataset-generation, Phase 6 training, data-vs-physics comparison, and exact-horizon forecast smoke commands passed. The smoke comparison did not demonstrate physics-informed superiority, and the smoke forecast error increased substantially from 30 to 120 seconds; these results validate execution and artifact integrity only.
 
+### Phase 9: Predictive Controller
+
+- TASK-46: Freeze validated predictive-controller configuration and immutable candidate-evaluation contracts.
+- TASK-49: Audit Phase A contracts and repository quality gates before control logic begins.
+- TASK-50: Implement the configurable predictive objective and component accounting.
+- TASK-51: Implement bounded receding-horizon candidate evaluation and first-action selection over `ThermalForecaster`.
+- TASK-55: Add a reproducible threshold/PID/predictive closed-loop comparison workflow and saved measured artifacts.
+- Checkpoint P9: predictive actions stay within limits, use forecasts rather than simulator truth, and are compared fairly with reactive baselines.
+
+### Phase 10: Fault Injection and Detection
+
+- TASK-47: Add immutable resistance-fault configuration without exposing labels to controllers.
+- TASK-52: Apply scheduled resistance multiplication inside `BatteryEnvironment` with exact boundary and reset behavior.
+- TASK-53: Implement rolling measured-minus-forecast residual statistics with persistent per-cell anomaly decisions.
+- TASK-54: Implement threshold-crossing lead-time measurement with explicit unavailable-result behavior.
+- TASK-56: Add a reproducible fault-and-detection workflow that persists fault provenance separately from inference inputs.
+- Checkpoint P10: the simulator owns the fault; detection is persistence-based; cell, score, time, severity, and measured lead time are recorded.
+
+### Phase 11: Dashboard
+
+- TASK-48: Declare supported Plotly and Streamlit runtime dependencies.
+- TASK-57: Load and validate experiment, forecast, and fault artifacts into immutable dashboard-facing data.
+- TASK-58: Build reusable Plotly heatmap, temperature/cooling time-series, and comparison figures.
+- TASK-59: Integrate metric cards, horizon-selectable predicted heatmap, controller/model comparison, and fault panel in Streamlit without simulation logic.
+- TASK-60: Reconcile exports and documentation, then run the Phase 9-11 repository audit and dashboard smoke verification.
+- Checkpoint P11: the dashboard renders from saved artifacts and the full suite, Ruff, strict mypy, workflows, and UI smoke path pass.
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
@@ -197,8 +235,12 @@ Phase 7-8 completion evidence: 1,000 pytest tests passed; Ruff and strict mypy c
 | OOD normalization leakage | High | Apply in-distribution train statistics unchanged to OOD artifacts |
 | Autoregressive truth leakage | High | Future temperatures are targets only; rollout receives at most exogenous conditions and actions |
 | Horizon/timestep ambiguity | Medium | Require exact integer horizon multiples and report horizons in seconds and steps |
+| Predictive-controller truth leakage | High | Depend only on `ThermalForecaster` and the currently observed state; test with a fake forecaster |
+| Objective scale imbalance | High | Expose component values and configurable weights in explicit SI-derived units |
+| Fault-label leakage | High | Keep fault configuration in simulator/scenario provenance, never detector or controller input |
+| Single-sample false alarm | High | Require configurable rolling calibration and consecutive detections |
+| Dashboard logic drift | Medium | Load immutable saved artifacts and keep simulation/training outside the UI module |
 
 ## Future Phases Beyond This Implementation
 
-- Phase 9 adds predictive control, including candidate coolant-action evaluation and cost aggregation.
-- Later fault work adds residual-based anomaly calibration and detection persistence; the dashboard follows in a later phase.
+- Phase 12 adds the benchmark suite across normal, high-current, hot-ambient, weak-cooling, charging, and resistance-fault scenarios.
