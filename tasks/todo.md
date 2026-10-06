@@ -86,7 +86,7 @@
 
 ## Phase 4
 
-- [ ] TASK-16 Implement experiment metrics.
+- [x] TASK-16 Implement experiment metrics.
   - Acceptance: peak/mean temperature, maximum spread, pump energy, violating sample count, and time above limit are calculated from explicit post-step records.
   - Verify: `python -m pytest tests/test_metrics.py`.
   - Dependencies: TASK-15.
