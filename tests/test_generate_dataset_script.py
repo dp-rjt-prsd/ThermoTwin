@@ -49,6 +49,14 @@ def test_public_data_exports_are_explicit() -> None:
         split_by_trajectory,
     )
     from thermotwin.data.generate import generate_dataset, generate_trajectory
+    from thermotwin.data.model_dataset import (
+        ModelDatasets,
+        ThermalTransitionDataset,
+        feature_names,
+        load_model_datasets,
+        target_names,
+    )
+    from thermotwin.data.preprocessing import NormalizationStats, fit_normalization
     from thermotwin.data.sampling import sample_dataset_scenario
     from thermotwin.data.types import (
         CoolantFlowProfile,
@@ -65,6 +73,13 @@ def test_public_data_exports_are_explicit() -> None:
         "DatasetScenario",
         "TransitionRecord",
         "DatasetSplits",
+        "NormalizationStats",
+        "fit_normalization",
+        "feature_names",
+        "target_names",
+        "ThermalTransitionDataset",
+        "ModelDatasets",
+        "load_model_datasets",
         "sample_dataset_scenario",
         "generate_trajectory",
         "generate_dataset",
@@ -81,6 +96,13 @@ def test_public_data_exports_are_explicit() -> None:
             DatasetScenario,
             TransitionRecord,
             DatasetSplits,
+            NormalizationStats,
+            fit_normalization,
+            feature_names,
+            target_names,
+            ThermalTransitionDataset,
+            ModelDatasets,
+            load_model_datasets,
             sample_dataset_scenario,
             generate_trajectory,
             generate_dataset,
