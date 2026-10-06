@@ -2,7 +2,7 @@
 
 ## Overview
 
-This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, model-agnostic multi-step forecast engine, predictive cooling, simulator-owned resistance faults, and artifact-driven dashboard for Phases 0-11. The TASK-60 integration audit remains pending. `AGENTS.md` is authoritative where project documents conflict.
+This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, model-agnostic multi-step forecast engine, predictive cooling, simulator-owned resistance faults, and artifact-driven dashboard for Phases 0-11. The TASK-60 integration audit and Checkpoint P11 are accepted. Phase 12 benchmark-suite work is next; quantitative superiority has not yet been demonstrated. `AGENTS.md` is authoritative where project documents conflict.
 
 ## Frozen Architecture Decisions
 
@@ -212,9 +212,9 @@ Phase 7-8 completion evidence: 1,000 pytest tests passed; Ruff and strict mypy c
 
 Phase 9-11 Phase A contract evidence: 1,096 pytest tests passed; Ruff and strict mypy passed. Predictive-control contracts, backward-compatible resistance-fault provenance, and dashboard dependency declarations are accepted. Downstream logic remains gated on these contracts.
 
-Phase 9-10 completion evidence: 1,220 pytest tests passed; Ruff and strict mypy passed; the predictive comparison and fault-detection smoke workflows completed with saved artifacts. The predictive smoke produced identical zero-cooling metrics across all four variants and therefore supports workflow integrity only, not controller superiority. The fault smoke measured detection at 15 s, threshold crossing at 26 s, and 11 s lead time for its configured synthetic resistance fault.
+Phase 9-10 completion evidence: 1,220 pytest tests passed; Ruff and strict mypy passed; the predictive comparison and fault-detection smoke workflows completed with saved artifacts. The predictive smoke produced identical metrics and zero cooling across all four variants and therefore supports workflow integrity only, not controller superiority. The fresh Phase 9-11 fault smoke measured detection at 15 s, threshold crossing at 26 s, 11 s lead time, and peak temperature of 317.12793572865644 K for its configured synthetic resistance fault.
 
-Phase 11 pre-audit evidence: current scoped test collection comprises 25 artifact-loader tests (including parametrized invalid-artifact cases), 12 Plotly builder tests, and 7 dashboard/launcher tests. The valid-artifact loader path and headless launcher health path are covered by real artifact fixtures and launcher checks. These focused checks are pre-audit evidence only; TASK-60 must rerun them and the repository gates. Phase 11 is not accepted until TASK-60 gates pass. The new predictive output directory must not pre-exist; for fault detection, its `fault-detection` output subdirectory must not pre-exist. The dashboard health path reads these saved artifacts without starting simulation or training.
+Phase 9-11 integration audit evidence (TASK-60): full pytest passed with 1,265 tests in 373.04 s; full Ruff passed; strict mypy passed for 120 source files; fresh predictive and fault smoke workflows passed. The strict artifact loader accepted four controller traces, two model forecast sets, and a 30-step fault trace with a saved 11 s lead. The documented dashboard launcher health check returned HTTP 200 with `ok`. The predictive smoke again produced identical metrics and zero cooling across all four variants, so it demonstrates workflow integrity only and does not establish controller superiority. The fault smoke measured detection at 15 s, threshold crossing at 26 s, 11 s lead, and peak temperature of 317.12793572865644 K. No controller or model superiority is demonstrated by this audit. The dashboard health path reads saved artifacts without starting simulation or training.
 
 ## Risks and Mitigations
 

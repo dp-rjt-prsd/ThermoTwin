@@ -295,8 +295,10 @@
   - Acceptance: the dashboard renders metric cards, selectable prediction horizon, controller/model comparisons, and fault details exclusively from loaded artifacts.
   - Verify: `python -m pytest tests/test_dashboard.py`; dashboard headless smoke command.
   - Dependencies: TASK-58.
-- [ ] TASK-60 Perform the Phase 9-11 integration audit.
+- [x] TASK-60 Perform the Phase 9-11 integration audit.
   - Acceptance: exports/docs are reconciled; full pytest, Ruff, strict mypy, predictive/fault workflows, and dashboard smoke pass; quantitative claims are limited to saved results.
   - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests scripts`; all Phase 9-11 smoke commands.
+  - Audit evidence: full pytest passed (1,265 passed in 373.04s); full Ruff passed; strict mypy passed for 120 source files; fresh predictive and fault smoke workflows passed; strict artifact loader accepted 4 controller traces, 2 model forecast sets, and a 30-step fault trace with a saved 11 s lead; documented dashboard launcher health returned HTTP 200 `ok`. Predictive smoke again produced identical metrics and zero cooling across all four variants, demonstrating workflow integrity only. Fault smoke measured detection at 15 s, threshold crossing at 26 s, lead 11 s, and peak 317.12793572865644 K. No controller or model superiority is demonstrated.
   - Dependencies: TASK-59.
-- [ ] Checkpoint P11: predictive control, fault diagnostics, and artifact-driven dashboard accepted for benchmark-suite work.
+- [x] Checkpoint P11: predictive control, fault diagnostics, and artifact-driven dashboard accepted for benchmark-suite work.
+  - Next: Phase 12 benchmark suite; quantitative superiority has not yet been demonstrated.
