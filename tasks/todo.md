@@ -134,8 +134,8 @@
   - Acceptance: smoke mode generates a small deterministic three-way dataset and manifest under a caller-selected output directory.
   - Verify: `python scripts/generate_dataset.py --smoke-test`.
   - Dependencies: TASK-23, TASK-24, TASK-25.
-- [ ] TASK-27 Perform the Phase 3-5 integration audit.
+- [x] TASK-27 Perform the Phase 3-5 integration audit.
   - Acceptance: all focused and repository quality gates pass; baseline and dataset smoke paths execute; dependency direction and result integrity are reviewed.
   - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests`; both smoke scripts.
   - Dependencies: TASK-26.
-- [ ] Checkpoint P5: Phase 3-5 accepted and ready for data-driven model work.
+- [x] Checkpoint P5: Phase 3-5 accepted and ready for data-driven model work.
