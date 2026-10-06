@@ -2,7 +2,7 @@
 
 ## Overview
 
-Build the tested foundation through a reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, pure data-driven and physics-informed thermal surrogates, and model-agnostic multi-step forecast engine required by `PLAN.md` Phases 0 through 8. Phases 0-6 are complete; Phases 7-8 are active. `AGENTS.md` is authoritative where project documents conflict.
+This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, and model-agnostic multi-step forecast engine for Phases 0-8. Phase 7-8 implementation is present; its final orchestrator integration audit remains pending as TASK-45 and Checkpoint P8. `AGENTS.md` is authoritative where project documents conflict.
 
 ## Frozen Architecture Decisions
 
@@ -24,10 +24,12 @@ Build the tested foundation through a reproducible baseline-controller experimen
 - Feature and target normalization statistics are fitted only on training rows and persisted separately from tensor-only model weights.
 - Training artifacts are non-overwriting and include configuration, seed, history, normalization, evaluation metrics, and a `state_dict` checkpoint.
 - Phase 7 evaluates the simulator heat balance at the current state using the canonical NumPy physics functions, then combines that fixed physical target with the predicted temperature delta using PyTorch tensor operations. This reuses authoritative physics while preserving gradients through the prediction.
+- Transition rows retain ordered raw simulator context and provenance so physics targets stay aligned with normalized training tensors; in-distribution training statistics are reused unchanged for OOD evaluation.
+- The physics residual is scaled by an explicit characteristic power in watts before its squared loss is combined with data loss. Both components remain reportable during training.
 - Data-only and physics-informed models use identical MLP architecture, initialization seed, splits, normalization, and optimizer settings; only the configured physics-loss weight differs.
 - OOD evaluation reuses normalization fitted on the in-distribution training split and never refits statistics on OOD artifacts.
 - Phase 8 forecasts autoregressively through a model-agnostic interface. Evaluation may supply recorded future exogenous conditions and actions, but never future cell temperatures; control defaults to persistence when future conditions are unavailable.
-- Forecast horizons are exact integer multiples of the trained model timestep. The required horizons are 30, 60, and 120 seconds.
+- Forecast horizons are exact integer multiples of the trained model timestep. Evaluation reports physical-unit errors for the required 30, 60, and 120 second horizons over held-out trajectories.
 
 ## Dependency DAG
 
@@ -68,16 +70,16 @@ TASK-00 repository bootstrap
                                                                                           -> TASK-33 model evaluation
                                                                                               -> TASK-34 training CLI integration
                                                                                                   -> TASK-35 Phase 6 audit
-                                                                                                      -> TASK-36 physics-loss configuration
-                                                                                                      -> TASK-37 transition/provenance contracts
-                                                                                                          -> TASK-38 physics heat-balance targets
-                                                                                                              -> TASK-39 residual and combined loss
-                                                                                                                  -> TASK-40 comparable dual-model trainer
-                                                                                                                      -> TASK-41 ID/OOD comparison workflow
-                                                                                                                          -> TASK-42 forecaster contract and wrapper
-                                                                                                                              -> TASK-43 autoregressive rollout
-                                                                                                                                  -> TASK-44 horizon evaluation
-                                                                                                                                      -> TASK-45 Phase 7-8 integration audit
+                                                                                                      +-> TASK-36 physics-loss configuration --+
+                                                                                                      +-> TASK-37 transition/provenance contracts +
+                                                                                                                                        -> TASK-38 canonical physics contexts
+                                                                                                                                            -> TASK-39 differentiable residual and combined loss
+                                                                                                                                                -> TASK-40 matched data-only/physics-informed training
+                                                                                                                                                    -> TASK-41 measured ID/OOD comparison
+                                                                                                                                                        -> TASK-42 forecaster contract and MLP adapter
+                                                                                                                                                            -> TASK-43 autoregressive rollout
+                                                                                                                                                                -> TASK-44 exact-horizon evaluation
+                                                                                                                                                                    -> TASK-45 Phase 7-8 integration audit
 ```
 
 Tasks with disjoint files may run concurrently only after their shared dependency is accepted. No concurrent task may modify the same file.
@@ -152,20 +154,20 @@ Phase 6 completion evidence: 875 pytest tests passed; Ruff and strict mypy check
 
 ### Phase 7: Physics-Informed Learning
 
-- TASK-36: Define validated physics-loss configuration.
-- TASK-37: Preserve ordered raw transition/provenance context and support reuse of train-fitted normalization.
-- TASK-38: Compute per-transition heat-balance targets by composing canonical simulator physics.
-- TASK-39: Implement differentiable physics residual and combined data/physics loss with physical-behavior tests.
-- TASK-40: Train comparable data-only and physics-informed variants through one deterministic trainer.
-- TASK-41: Run and persist measured in-distribution and deliberately shifted OOD comparison results.
+- TASK-36: Define validated physics-loss configuration with explicit dimensionless weight and watt residual scale.
+- TASK-37: Preserve ordered raw transition/provenance context aligned with normalized tensors and reuse unchanged train-fitted normalization for OOD data.
+- TASK-38: Compose each transition's heat-balance context through canonical simulator physics functions.
+- TASK-39: Compute a differentiable physics residual and combined data/physics loss, retaining gradients through predictions and testing physical signs.
+- TASK-40: Train matched data-only and physics-informed MLP variants with the same initialization, data, normalization, and optimizer settings.
+- TASK-41: Run and persist measured in-distribution and shifted OOD comparisons, including physical-unit prediction and physics-consistency metrics.
 - Checkpoint P7: both variants train from the same initialization and data contract; residual gradients and physical signs are verified; ID/OOD metrics come only from saved outputs.
 
 ### Phase 8: Forecast Engine
 
-- TASK-42: Freeze the model-agnostic `ThermalForecaster` contract and single-step MLP wrapper.
-- TASK-43: Implement autoregressive rollout with explicit future-condition semantics and no future-temperature leakage.
-- TASK-44: Evaluate physical-unit forecast error at exact 30, 60, and 120 second horizons.
-- TASK-45: Reconcile exports, scripts, documentation, and run the Phase 7-8 repository audit.
+- TASK-42: Define the model-agnostic `ThermalForecaster` contract and MLP adapter for physical-unit one-step predictions.
+- TASK-43: Roll out autoregressively with explicit action/exogenous-condition inputs, persistence defaults, and no future-temperature leakage.
+- TASK-44: Measure physical-unit forecast error across held-out trajectories at exact 30, 60, and 120 second horizons.
+- TASK-45: Reconcile exports, scripts, and documentation, then run the Phase 7-8 repository audit. This final audit remains pending.
 - Checkpoint P8: data-only and physics-informed checkpoints can be loaded behind the same forecaster interface; required-horizon evaluations, full quality gates, and smoke workflows pass.
 
 ## Risks and Mitigations
@@ -194,7 +196,7 @@ Phase 6 completion evidence: 875 pytest tests passed; Ruff and strict mypy check
 | Autoregressive truth leakage | High | Future temperatures are targets only; rollout receives at most exogenous conditions and actions |
 | Horizon/timestep ambiguity | Medium | Require exact integer horizon multiples and report horizons in seconds and steps |
 
-## Open Questions Deferred Beyond Phase 8
+## Future Phases Beyond This Implementation
 
-- Candidate-action sequence policy and cost aggregation for Phase 9 predictive control.
-- Residual-based anomaly calibration and detection persistence for Phase 10.
+- Phase 9 adds predictive control, including candidate coolant-action evaluation and cost aggregation.
+- Later fault work adds residual-based anomaly calibration and detection persistence; the dashboard follows in a later phase.
