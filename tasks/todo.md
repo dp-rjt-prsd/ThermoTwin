@@ -130,7 +130,7 @@
   - Acceptance: train/validation/test trajectory IDs are disjoint, seeded splits are deterministic, flattened rows retain all 12 cell states, and files never silently overwrite.
   - Verify: `python -m pytest tests/test_dataset.py`.
   - Dependencies: TASK-22.
-- [ ] TASK-26 Add dataset-generation CLI integration.
+- [x] TASK-26 Add dataset-generation CLI integration.
   - Acceptance: smoke mode generates a small deterministic three-way dataset and manifest under a caller-selected output directory.
   - Verify: `python scripts/generate_dataset.py --smoke-test`.
   - Dependencies: TASK-23, TASK-24, TASK-25.
