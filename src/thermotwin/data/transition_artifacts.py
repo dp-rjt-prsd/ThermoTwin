@@ -19,6 +19,7 @@ from thermotwin.core import (
     CoolingConfig,
     EnvironmentConfig,
     PackConfig,
+    ResistanceFaultConfig,
     SimulationConfig,
 )
 from thermotwin.data.dataset import _STATE_SCALAR_FIELDS
@@ -117,15 +118,26 @@ def _read_generation_config(path: Path) -> EnvironmentConfig:
         DatasetSamplingConfig(**sampling)
 
         environment = raw["base_environment_config"]
-        if type(environment) is not dict or set(environment) != {
-            "pack",
-            "cooling",
-            "simulation",
-        }:
-            raise ValueError("must contain exactly pack, cooling, and simulation")
+        required_environment_keys = {"pack", "cooling", "simulation"}
+        if type(environment) is not dict or set(environment) not in (
+            required_environment_keys,
+            required_environment_keys | {"resistance_fault"},
+        ):
+            raise ValueError(
+                "must contain pack, cooling, and simulation, optionally "
+                "resistance_fault"
+            )
         pack = _strict_dataclass_dict(environment["pack"], PackConfig)
         cooling = _strict_dataclass_dict(environment["cooling"], CoolingConfig)
         simulation = _strict_dataclass_dict(environment["simulation"], SimulationConfig)
+        fault_value = environment.get("resistance_fault")
+        resistance_fault = (
+            None
+            if fault_value is None
+            else ResistanceFaultConfig(
+                **_strict_dataclass_dict(fault_value, ResistanceFaultConfig)
+            )
+        )
         for field_name in (
             "initial_cell_temperatures_k",
             "initial_cell_resistances_ohm",
@@ -136,7 +148,10 @@ def _read_generation_config(path: Path) -> EnvironmentConfig:
                     raise ValueError(f"{field_name} must be a JSON array or null")
                 simulation[field_name] = tuple(value)
         config = EnvironmentConfig(
-            PackConfig(**pack), CoolingConfig(**cooling), SimulationConfig(**simulation)
+            PackConfig(**pack),
+            CoolingConfig(**cooling),
+            SimulationConfig(**simulation),
+            resistance_fault,
         )
     except (TypeError, ValueError, OverflowError) as error:
         raise ValueError(

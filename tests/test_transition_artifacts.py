@@ -13,6 +13,7 @@ from thermotwin.core import (
     CoolingConfig,
     EnvironmentConfig,
     PackConfig,
+    ResistanceFaultConfig,
     SimulationConfig,
 )
 from thermotwin.data.transition_artifacts import (
@@ -71,6 +72,7 @@ def test_transition_loader_reconstructs_csv_order_and_alignment(tmp_path: Path) 
     assert isinstance(artifacts, TransitionArtifacts)
     assert type(artifacts.base_environment_config) is EnvironmentConfig
     assert artifacts.base_environment_config.pack.cell_count == 2
+    assert artifacts.base_environment_config.resistance_fault is None
     for split_name in ("train", "validation", "test"):
         records = getattr(artifacts, split_name)
         frame = pd.read_csv(artifact_dir / f"{split_name}.csv")
@@ -174,6 +176,82 @@ def test_transition_loader_rejects_invalid_base_environment_config(
     path = artifact_dir / "generation_config.json"
     config = json.loads(path.read_text(encoding="utf-8"))
     config["base_environment_config"]["pack"]["rows"] = True
+    path.write_text(json.dumps(config), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="base_environment_config"):
+        load_transition_artifacts(artifact_dir)
+
+
+def test_transition_loader_accepts_legacy_fault_free_environment_config(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = _artifacts_with_provenance(tmp_path / "data")
+    path = artifact_dir / "generation_config.json"
+    config = json.loads(path.read_text(encoding="utf-8"))
+    del config["base_environment_config"]["resistance_fault"]
+    path.write_text(json.dumps(config), encoding="utf-8")
+
+    artifacts = load_transition_artifacts(artifact_dir)
+
+    assert artifacts.base_environment_config.resistance_fault is None
+
+
+def test_transition_loader_reconstructs_resistance_fault_provenance(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = _artifacts_with_provenance(tmp_path / "data")
+    path = artifact_dir / "generation_config.json"
+    config = json.loads(path.read_text(encoding="utf-8"))
+    config["base_environment_config"]["resistance_fault"] = {
+        "cell_index": 1,
+        "start_time_s": 4.0,
+        "resistance_multiplier": 2.5,
+    }
+    path.write_text(json.dumps(config), encoding="utf-8")
+
+    artifacts = load_transition_artifacts(artifact_dir)
+
+    fault = artifacts.base_environment_config.resistance_fault
+    assert type(fault) is ResistanceFaultConfig
+    assert fault.cell_index == 1
+    assert fault.start_time_s == 4.0
+    assert fault.resistance_multiplier == 2.5
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        {"cell_index": 1, "start_time_s": 4.0},
+        {
+            "cell_index": 1,
+            "start_time_s": 4.0,
+            "resistance_multiplier": 2.5,
+            "unknown": True,
+        },
+        {"cell_index": 1, "start_time_s": 4.0, "resistance_multiplier": 1.0},
+        {"cell_index": True, "start_time_s": 4.0, "resistance_multiplier": 2.5},
+    ],
+)
+def test_transition_loader_rejects_malformed_resistance_fault(
+    tmp_path: Path, fault: object
+) -> None:
+    artifact_dir = _artifacts_with_provenance(tmp_path / "data")
+    path = artifact_dir / "generation_config.json"
+    config = json.loads(path.read_text(encoding="utf-8"))
+    config["base_environment_config"]["resistance_fault"] = fault
+    path.write_text(json.dumps(config), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="base_environment_config"):
+        load_transition_artifacts(artifact_dir)
+
+
+def test_transition_loader_rejects_unknown_environment_config_keys(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = _artifacts_with_provenance(tmp_path / "data")
+    path = artifact_dir / "generation_config.json"
+    config = json.loads(path.read_text(encoding="utf-8"))
+    config["base_environment_config"]["unexpected"] = None
     path.write_text(json.dumps(config), encoding="utf-8")
 
     with pytest.raises(ValueError, match="base_environment_config"):

@@ -223,7 +223,13 @@ def test_smoke_generation_persists_consistent_provenance_and_deterministic_files
     ]
     assert "distribution" not in provenance
     base_config = provenance["base_environment_config"]
-    assert set(base_config) == {"pack", "cooling", "simulation"}
+    assert set(base_config) == {
+        "pack",
+        "cooling",
+        "simulation",
+        "resistance_fault",
+    }
+    assert base_config["resistance_fault"] is None
     assert set(base_config["pack"]) == {
         "rows",
         "columns",
