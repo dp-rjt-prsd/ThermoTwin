@@ -2,7 +2,7 @@
 
 ## Overview
 
-Build the tested foundation through a reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, and pure data-driven thermal surrogate required by `PLAN.md` Phases 0 through 6. `AGENTS.md` is authoritative where project documents conflict.
+Build the tested foundation through a reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, and pure data-driven thermal surrogate required by `PLAN.md` Phases 0 through 6. Phases 0-6 are complete; physics-informed learning and subsequent capabilities remain future work. `AGENTS.md` is authoritative where project documents conflict.
 
 ## Frozen Architecture Decisions
 
@@ -19,6 +19,7 @@ Build the tested foundation through a reproducible baseline-controller experimen
 - Dataset samples are immutable `(state_t, action_t, state_t+1)` transitions. Dataset splitting is performed only on whole trajectory identifiers.
 - Phase 5 may configure initial per-cell resistances, but time-varying fault injection and fault labels remain Phase 10 responsibilities.
 - Phase 6 uses a small PyTorch MLP to predict one-step cell-temperature deltas. It does not include physics loss, multi-step rollout, or predictive control.
+- Phase 6 training uses statistics fitted only on training rows, seeded mini-batches, validation-based best-weight restoration and early stopping, and a non-overwriting artifact directory. Test evaluation reports errors in kelvin.
 - Model inputs are ordered explicitly as current, SOC, current cell temperatures, ambient temperature, coolant inlet temperature, and applied coolant flow.
 - Feature and target normalization statistics are fitted only on training rows and persisted separately from tensor-only model weights.
 - Training artifacts are non-overwriting and include configuration, seed, history, normalization, evaluation metrics, and a `state_dict` checkpoint.
@@ -132,6 +133,8 @@ Tasks with disjoint files may run concurrently only after their shared dependenc
 - TASK-35: Run the Phase 6 repository audit and update documentation/status.
 - Checkpoint P6: repeated CPU smoke training is deterministic; the saved checkpoint reloads; evaluation is calculated in kelvin; full pytest, Ruff, mypy, and all smoke commands pass.
 
+Phase 6 completion evidence: 875 pytest tests passed; Ruff and strict mypy checks passed; baseline, dataset-generation, and model-training smoke commands passed. The training smoke path verified artifact production and kelvin evaluation; its metrics are smoke verification only, not a comparative performance claim.
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
@@ -154,5 +157,5 @@ Tasks with disjoint files may run concurrently only after their shared dependenc
 
 ## Open Questions Deferred Beyond Phase 6
 
-- Differentiable backend strategy for reusing canonical equations in PyTorch physics loss.
-- Forecaster state/action representation for Phase 8.
+- Differentiable backend strategy for reusing canonical equations in PyTorch physics-informed loss (future physics-informed learning phase).
+- Forecaster state/action representation for Phase 8 rollout forecasting.

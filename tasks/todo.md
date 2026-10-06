@@ -142,38 +142,39 @@
 
 ## Phase 6
 
-- [ ] TASK-28 Add ML dependencies and training configuration.
+- [x] TASK-28 Add ML dependencies and training configuration.
   - Acceptance: supported PyTorch and pandas runtime dependencies are declared; model/training hyperparameters, seed, device policy, and smoke settings are explicit YAML values.
   - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests`.
   - Dependencies: TASK-27.
-- [ ] TASK-29 Implement train-fitted normalization statistics.
+- [x] TASK-29 Implement train-fitted normalization statistics.
   - Acceptance: immutable feature/target statistics validate shapes and finiteness, constant columns use a safe unit scale, transforms round-trip, and JSON metadata round-trips.
   - Verify: `python -m pytest tests/test_preprocessing.py`.
   - Dependencies: TASK-28.
-- [ ] TASK-30 Implement the model dataset loader.
+- [x] TASK-30 Implement the model dataset loader.
   - Acceptance: manifest/CSV boundaries are validated, feature and target order is explicit, normalization is fitted only on train rows, trajectories remain disjoint, and no next-state fields enter model features.
   - Verify: `python -m pytest tests/test_model_dataset.py`.
   - Dependencies: TASK-29.
-- [ ] Checkpoint P6A: preprocessing and loading focused tests plus repository quality gates pass.
-- [ ] TASK-31 Implement the thermal delta MLP.
+- [x] Checkpoint P6A: preprocessing and loading focused tests plus repository quality gates pass.
+- [x] TASK-31 Implement the thermal delta MLP.
   - Acceptance: configurable Linear/GELU layers map `[batch, 17]` to `[batch, 12]`, reject invalid dimensions, preserve gradients, and expose serializable architecture metadata.
   - Verify: `python -m pytest tests/test_mlp.py`.
   - Dependencies: TASK-30.
-- [ ] TASK-32 Implement deterministic training and checkpointing.
+- [x] TASK-32 Implement deterministic training and checkpointing.
   - Acceptance: seeded DataLoader training records train/validation loss, restores the best validation weights, supports early stopping/device selection, and writes a tensor-only checkpoint without overwriting.
   - Verify: `python -m pytest tests/test_model_train.py`.
   - Dependencies: TASK-31.
-- [ ] TASK-33 Implement physical-unit evaluation.
+- [x] TASK-33 Implement physical-unit evaluation.
   - Acceptance: MAE, RMSE, per-cell MAE/RMSE, maximum absolute error, and worst-cell index are computed after target denormalization and reject incompatible shapes.
   - Verify: `python -m pytest tests/test_model_evaluation.py`.
   - Dependencies: TASK-31.
-- [ ] Checkpoint P6B: model, trainer, and evaluator focused tests plus repository quality gates pass.
-- [ ] TASK-34 Add training CLI integration.
+- [x] Checkpoint P6B: model, trainer, and evaluator focused tests plus repository quality gates pass.
+- [x] TASK-34 Add training CLI integration.
   - Acceptance: `scripts/train_model.py --smoke-test` can generate/load a small dataset, trains on CPU, evaluates the test split, and persists configuration/history/normalization/metrics/provenance plus reloadable weights in a new output directory.
   - Verify: `python -m pytest tests/test_train_model_script.py`; `python scripts/train_model.py --smoke-test`.
   - Dependencies: TASK-32, TASK-33.
-- [ ] TASK-35 Perform the Phase 6 integration audit.
+- [x] TASK-35 Perform the Phase 6 integration audit.
   - Acceptance: all focused and repository quality gates pass; all smoke paths execute; deterministic reruns match; documentation reflects Phase 6 without claiming comparative performance.
   - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests`; baseline, dataset, and model-training smoke scripts.
   - Dependencies: TASK-34.
-- [ ] Checkpoint P6: pure data-driven model training and evaluation accepted and ready for physics-informed learning.
+- [x] Checkpoint P6: pure data-driven model training and evaluation accepted and ready for physics-informed learning.
+  - Audit evidence: 875 pytest tests passed; Ruff and strict mypy passed; baseline, dataset, and model-training smoke commands passed. Smoke metrics verify the workflow only and are not a comparative performance claim.
