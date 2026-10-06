@@ -11,6 +11,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, cast
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "generate_dataset.py"
 ARTIFACTS = {
@@ -22,12 +24,16 @@ ARTIFACTS = {
 }
 
 
-def _run_generator(output_directory: Path | None, seed: int = 42) -> dict[str, Any]:
+def _run_generator(
+    output_directory: Path | None, seed: int = 42, *, ood: bool = False
+) -> dict[str, Any]:
     environment = os.environ.copy()
     environment["PYTHONPATH"] = os.pathsep.join(
         part for part in (str(ROOT / "src"), environment.get("PYTHONPATH", "")) if part
     )
     command = [sys.executable, str(SCRIPT), "--smoke-test", "--seed", str(seed)]
+    if ood:
+        command.append("--ood")
     if output_directory is not None:
         command.extend(("--output-directory", str(output_directory)))
     completed = subprocess.run(
@@ -125,6 +131,7 @@ def test_smoke_generation_persists_consistent_provenance_and_deterministic_files
     assert summary["seed"] == 13
     assert summary["trajectory_count"] == 6
     assert summary["total_row_count"] == 60
+    assert summary["distribution"] == "in_distribution"
     assert summary["artifacts"] == sorted(ARTIFACTS)
 
     manifest = json.loads(
@@ -189,6 +196,7 @@ def test_smoke_generation_persists_consistent_provenance_and_deterministic_files
         "configs/simulation.yaml",
         "configs/dataset.yaml",
     ]
+    assert "distribution" not in provenance
     base_config = provenance["base_environment_config"]
     assert set(base_config) == {"pack", "cooling", "simulation"}
     assert set(base_config["pack"]) == {
@@ -247,6 +255,64 @@ def test_smoke_generation_persists_consistent_provenance_and_deterministic_files
 
     second_directory = tmp_path / "dataset-second"
     _run_generator(second_directory, seed=13)
+    for filename in ARTIFACTS:
+        assert (first_directory / filename).read_bytes() == (
+            second_directory / filename
+        ).read_bytes()
+
+
+def test_ood_smoke_generation_uses_shifted_ranges_and_is_deterministic(
+    tmp_path: Path,
+) -> None:
+    first_directory = tmp_path / "ood-first"
+    summary = _run_generator(first_directory, seed=13, ood=True)
+    provenance = json.loads(
+        (first_directory / "generation_config.json").read_text(encoding="utf-8")
+    )
+
+    assert summary["distribution"] == "out_of_distribution"
+    assert summary["trajectory_count"] == 6
+    assert summary["total_row_count"] == 60
+    assert provenance["sampling_config"]["duration_s"] == 10.0
+    assert provenance["source_config_files"] == [
+        "configs/pack.yaml",
+        "configs/simulation.yaml",
+        "configs/dataset_ood.yaml",
+    ]
+    assert "distribution" not in provenance
+
+    normal = yaml.safe_load(
+        (ROOT / "configs" / "dataset.yaml").read_text(encoding="utf-8")
+    )["sampling"]
+    ood = yaml.safe_load(
+        (ROOT / "configs" / "dataset_ood.yaml").read_text(encoding="utf-8")
+    )["sampling"]
+    pack = yaml.safe_load(
+        (ROOT / "configs" / "pack.yaml").read_text(encoding="utf-8")
+    )
+    shifted_fields = (
+        "initial_soc_fraction_range",
+        "initial_cell_temperature_k_range",
+        "ambient_temperature_k_range",
+        "coolant_inlet_temperature_k_range",
+        "peak_current_a_range",
+        "cell_resistance_scale_range",
+        "neighbor_thermal_resistance_scale_range",
+        "cooling_effectiveness_scale_range",
+    )
+    for field in shifted_fields:
+        assert ood[field] == provenance["sampling_config"][field]
+        assert ood[field][1] < normal[field][0] or ood[field][0] > normal[field][1]
+    assert ood["coolant_mass_flow_kg_s_range"] == provenance["sampling_config"][
+        "coolant_mass_flow_kg_s_range"
+    ]
+    assert ood["coolant_mass_flow_kg_s_range"][0] >= 0.075
+    assert ood["coolant_mass_flow_kg_s_range"][1] <= pack["cooling"][
+        "maximum_coolant_mass_flow_kg_s"
+    ]
+
+    second_directory = tmp_path / "ood-second"
+    _run_generator(second_directory, seed=13, ood=True)
     for filename in ARTIFACTS:
         assert (first_directory / filename).read_bytes() == (
             second_directory / filename

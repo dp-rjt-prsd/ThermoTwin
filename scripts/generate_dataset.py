@@ -30,11 +30,12 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SCHEMA_VERSION = "1.0"
 _SMOKE_MAX_STEPS = 10
 _NORMAL_TRAJECTORY_COUNT = 100
-_SOURCE_CONFIG_FILES = (
+_BASE_SOURCE_CONFIG_FILES = (
     "configs/pack.yaml",
     "configs/simulation.yaml",
-    "configs/dataset.yaml",
 )
+_NORMAL_DATASET_CONFIG = "configs/dataset.yaml"
+_OOD_DATASET_CONFIG = "configs/dataset_ood.yaml"
 _ARTIFACT_FILENAMES = (
     "train.csv",
     "validation.csv",
@@ -76,10 +77,14 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return contents
 
 
-def _load_configs() -> tuple[EnvironmentConfig, DatasetSamplingConfig]:
-    pack_yaml = _load_yaml(_PROJECT_ROOT / _SOURCE_CONFIG_FILES[0])
-    simulation_yaml = _load_yaml(_PROJECT_ROOT / _SOURCE_CONFIG_FILES[1])
-    dataset_yaml = _load_yaml(_PROJECT_ROOT / _SOURCE_CONFIG_FILES[2])
+def _load_configs(
+    *, ood: bool = False
+) -> tuple[EnvironmentConfig, DatasetSamplingConfig, tuple[str, ...]]:
+    dataset_config_file = _OOD_DATASET_CONFIG if ood else _NORMAL_DATASET_CONFIG
+    source_config_files = (*_BASE_SOURCE_CONFIG_FILES, dataset_config_file)
+    pack_yaml = _load_yaml(_PROJECT_ROOT / source_config_files[0])
+    simulation_yaml = _load_yaml(_PROJECT_ROOT / source_config_files[1])
+    dataset_yaml = _load_yaml(_PROJECT_ROOT / source_config_files[2])
 
     pack_values = dict(pack_yaml["pack"])
     cooling_values = dict(pack_yaml["cooling"])
@@ -102,7 +107,7 @@ def _load_configs() -> tuple[EnvironmentConfig, DatasetSamplingConfig]:
         sampling_values["allowed_profile_names"]
     )
     sampling_config = DatasetSamplingConfig(**sampling_values)
-    return environment_config, sampling_config
+    return environment_config, sampling_config, source_config_files
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -111,6 +116,11 @@ def _parser() -> argparse.ArgumentParser:
         "--smoke-test",
         action="store_true",
         help=f"run trajectories of at most {_SMOKE_MAX_STEPS} simulation steps",
+    )
+    parser.add_argument(
+        "--ood",
+        action="store_true",
+        help="sample from the shifted out-of-distribution conditions",
     )
     parser.add_argument(
         "--output-directory",
@@ -132,7 +142,9 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Generate and persist a trajectory-split dataset, then print its summary."""
     args = _parser().parse_args(argv)
-    environment_config, base_sampling_config = _load_configs()
+    environment_config, base_sampling_config, source_config_files = _load_configs(
+        ood=args.ood
+    )
     trajectory_count = args.trajectory_count
     if trajectory_count is None:
         trajectory_count = 6 if args.smoke_test else _NORMAL_TRAJECTORY_COUNT
@@ -174,7 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "trajectory_count": trajectory_count,
         "base_environment_config": asdict(environment_config),
         "sampling_config": asdict(sampling_config),
-        "source_config_files": list(_SOURCE_CONFIG_FILES),
+        "source_config_files": list(source_config_files),
     }
     (artifact_directory / "generation_config.json").write_text(
         json.dumps(generation_config, allow_nan=False, indent=2, sort_keys=True) + "\n",
@@ -196,6 +208,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     summary = {
         "output_directory": str(artifact_directory.resolve()),
         "seed": args.seed,
+        "distribution": "out_of_distribution" if args.ood else "in_distribution",
         "trajectory_count": trajectory_count,
         "splits": split_summary,
         "total_row_count": len(records),

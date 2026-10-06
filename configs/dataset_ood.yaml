@@ -1,0 +1,19 @@
+# Illustrative prototype stress conditions, not manufacturer data.
+sampling:
+  duration_s: 120.0
+  time_step_s: 1.0
+  initial_soc_fraction_range: [0.05, 0.18]
+  initial_cell_temperature_k_range: [318.0, 328.0]
+  ambient_temperature_k_range: [315.0, 325.0]
+  coolant_inlet_temperature_k_range: [278.0, 282.0]
+  peak_current_a_range: [260.0, 320.0]
+  coolant_mass_flow_kg_s_range: [0.075, 0.1]
+  cell_resistance_scale_range: [1.9, 2.5]
+  neighbor_thermal_resistance_scale_range: [1.6, 2.2]
+  cooling_effectiveness_scale_range: [1.5, 2.0]
+  allowed_profile_names:
+    - constant
+    - pulse
+    - stop_and_go
+    - aggressive
+    - fast_charging
