@@ -1,0 +1,19 @@
+# Illustrative ThermoTwin fault scenario and detector settings; not manufacturer data.
+fault_detection:
+  # Synthetic schedule applied only inside BatteryEnvironment.
+  fault_cell_index: 5
+  fault_start_time_s: 60.0
+  resistance_multiplier: 3.0
+  duration_s: 180.0
+  current_a: 160.0
+  smoke_test:
+    fault_cell_index: 5
+    fault_start_time_s: 12.0
+    resistance_multiplier: 3.0
+    duration_s: 30.0
+    current_a: 120.0
+  detector:
+    rolling_window_steps: 10
+    score_threshold: 3.0
+    persistence_steps: 3
+    epsilon_k: 0.000001
