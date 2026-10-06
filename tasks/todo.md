@@ -178,3 +178,52 @@
   - Dependencies: TASK-34.
 - [x] Checkpoint P6: pure data-driven model training and evaluation accepted and ready for physics-informed learning.
   - Audit evidence: 875 pytest tests passed; Ruff and strict mypy passed; baseline, dataset, and model-training smoke commands passed. Smoke metrics verify the workflow only and are not a comparative performance claim.
+
+## Phase 7
+
+- [ ] TASK-36 Define physics-loss configuration.
+  - Acceptance: finite nonnegative physics weight and positive watt residual scale are explicit in immutable config and YAML, including smoke values.
+  - Verify: `python -m pytest tests/test_model_config.py`.
+  - Dependencies: TASK-35.
+- [ ] TASK-37 Add ordered transition/provenance contracts and reusable normalization.
+  - Acceptance: CSV rows reconstruct exact immutable transitions aligned with normalized tensors; generation provenance is validated; externally supplied training statistics are reused unchanged for OOD data.
+  - Verify: `python -m pytest tests/test_model_dataset.py tests/test_transition_artifacts.py`.
+  - Dependencies: TASK-35.
+- [ ] Checkpoint P7A: Phase A contracts pass focused tests, Ruff, strict mypy, and diff review before physics logic begins.
+- [ ] TASK-38 Compute canonical physics heat-balance targets.
+  - Acceptance: Joule heat, cooling, neighbor conduction, and ambient exchange are composed from existing physics functions with sampled scenario parameters and aligned to every transition row.
+  - Verify: `python -m pytest tests/test_physics_dataset.py`.
+  - Dependencies: TASK-36, TASK-37.
+- [ ] TASK-39 Implement differentiable physics residual and combined loss.
+  - Acceptance: equilibrium, incorrect derivative, resistance, cooling, conduction, scaling, and backward-gradient behavior are tested without NumPy conversion of predictions.
+  - Verify: `python -m pytest tests/test_model_losses.py`.
+  - Dependencies: TASK-38.
+- [ ] TASK-40 Implement comparable dual-model training.
+  - Acceptance: one deterministic trainer produces data-only and physics-informed models with identical architecture/initialization/data/optimizer settings and reports both loss components.
+  - Verify: `python -m pytest tests/test_physics_train.py`.
+  - Dependencies: TASK-39.
+- [ ] TASK-41 Add measured ID/OOD comparison workflow.
+  - Acceptance: both variants are evaluated on ID and shifted OOD trajectories using only ID train normalization; artifacts include configuration, seeds, checkpoints, component histories, and physical-unit/physics-consistency metrics.
+  - Verify: `python -m pytest tests/test_compare_models_script.py`; `python scripts/compare_models.py --smoke-test`.
+  - Dependencies: TASK-40.
+- [ ] Checkpoint P7: physics-informed learning comparison accepted without assuming which model wins.
+
+## Phase 8
+
+- [ ] TASK-42 Freeze the forecaster contract and implement single-step inference.
+  - Acceptance: a runtime-checkable model-agnostic interface predicts physical next-cell temperatures from `BatteryState` and legal `CoolingAction` using persisted normalization and explicit model timestep.
+  - Verify: `python -m pytest tests/test_forecaster.py`.
+  - Dependencies: TASK-41.
+- [ ] TASK-43 Implement autoregressive rollout.
+  - Acceptance: rollout feeds predicted temperatures back into later steps, accepts explicit future exogenous conditions/actions, supports persistence defaults, and never consumes future true temperatures.
+  - Verify: `python -m pytest tests/test_forecaster.py`.
+  - Dependencies: TASK-42.
+- [ ] TASK-44 Evaluate exact 30/60/120-second horizons.
+  - Acceptance: horizon/timestep compatibility is validated and MAE/RMSE/maximum cell error are measured by horizon over whole held-out trajectories for either trained model variant.
+  - Verify: `python -m pytest tests/test_forecast_evaluation.py tests/test_forecast_script.py`; `python scripts/evaluate_forecasts.py --smoke-test`.
+  - Dependencies: TASK-43.
+- [ ] TASK-45 Perform the Phase 7-8 integration audit.
+  - Acceptance: exports/docs are reconciled; full pytest, Ruff, strict mypy, comparison smoke, and forecast smoke pass; measured artifacts are reviewed for plausibility and no unsupported superiority claim is made.
+  - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests scripts`; both new smoke scripts.
+  - Dependencies: TASK-44.
+- [ ] Checkpoint P8: physics-informed models and required-horizon forecast engine accepted for predictive-controller work.
