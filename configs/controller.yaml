@@ -24,6 +24,23 @@ pid_controller:
   minimum_coolant_mass_flow_kg_s: 0.0
   maximum_coolant_mass_flow_kg_s: 0.1
 
+predictive_controller:
+  # Illustrative horizon length; elapsed seconds follow the control interval.
+  horizon_steps: 12
+  candidate_count: 5
+  # Keep candidate flows within the illustrative cooling configuration.
+  minimum_coolant_mass_flow_kg_s: 0.0
+  maximum_coolant_mass_flow_kg_s: 0.1
+  thermal_safety_limit_k: 313.15
+  # Cubic pump-power approximation; this is not a manufacturer pump curve.
+  pump_power_coefficient_w_s3_kg3: 100000.0
+  objective_weights:
+    # Illustrative scalarization values; tune against measured experiments.
+    peak_temperature_weight: 1.0
+    temperature_spread_weight: 1.0
+    pump_energy_weight: 0.0001
+    safety_penalty_weight: 100.0
+
 thermal_safety_limit_k: 313.15
 
 # Cubic approximation: pump_power_w = coefficient * flow_kg_s ** 3.
