@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import numpy as np
@@ -165,3 +166,28 @@ def test_fault_free_trajectory_unchanged() -> None:
         np.testing.assert_array_equal(
             state.cell_resistances_ohm, reference_state.cell_resistances_ohm
         )
+
+
+def test_fault_free_step_preserves_resistances_on_current_persisted_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    environment = BatteryEnvironment(lambda _: 2.0)
+    reference = BatteryEnvironment(lambda _: 2.0)
+    environment.reset(make_config())
+    persisted_resistances = np.asarray([0.02, 0.01, 0.03])
+    persisted_state = replace(
+        environment.state,
+        cell_resistances_ohm=persisted_resistances,
+    )
+    monkeypatch.setattr(environment, "_state", persisted_state)
+    reference.reset(
+        make_config(initial_cell_resistances_ohm=tuple(persisted_resistances))
+    )
+
+    resumed = environment.step(CoolingAction(0.0), 1.0)
+    expected = reference.step(CoolingAction(0.0), 1.0)
+
+    np.testing.assert_array_equal(resumed.cell_resistances_ohm, persisted_resistances)
+    np.testing.assert_array_equal(
+        resumed.cell_temperatures_k, expected.cell_temperatures_k
+    )

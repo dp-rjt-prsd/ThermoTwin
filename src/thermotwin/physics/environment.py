@@ -144,7 +144,10 @@ class BatteryEnvironment:
             raise ValueError("coolant flow is outside configured limits")
 
         temperatures = current_state.cell_temperatures_k
-        interval_resistances = self._resistances_at_time(current_state.time_s)
+        if config.resistance_fault is None:
+            interval_resistances = current_state.cell_resistances_ohm
+        else:
+            interval_resistances = self._resistances_at_time(current_state.time_s)
         generated_heat = joule_heating_w(
             current_state.current_a,
             interval_resistances,
@@ -178,6 +181,11 @@ class BatteryEnvironment:
             step_s,
         )
         next_time = current_state.time_s + step_s
+        next_resistances = (
+            current_state.cell_resistances_ohm
+            if config.resistance_fault is None
+            else self._resistances_at_time(next_time)
+        )
         next_state = BatteryState(
             time_s=next_time,
             current_a=self._current_profile(next_time),
@@ -191,7 +199,7 @@ class BatteryEnvironment:
             coolant_inlet_temperature_k=current_state.coolant_inlet_temperature_k,
             coolant_mass_flow_kg_s=flow,
             cell_temperatures_k=next_temperatures,
-            cell_resistances_ohm=self._resistances_at_time(next_time),
+            cell_resistances_ohm=next_resistances,
         )
         self._state = next_state
         return next_state
