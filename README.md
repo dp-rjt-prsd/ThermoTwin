@@ -28,9 +28,10 @@ evaluation reports physical-unit errors at exact 30, 60, and 120 second horizons
 The current smoke evidence establishes that these workflows execute and produce
 artifacts; it does not establish that the physics-informed model is superior. In
 the current smoke forecast, error grows substantially at longer horizons, so the
-smoke metrics must not be presented as a performance benchmark. The full Phase
-7-8 integration audit remains pending. Phase 9 predictive cooling control and
-later fault-detection and dashboard work remain future phases.
+smoke metrics must not be presented as a performance benchmark. The Phase 7-8
+integration audit passes the repository quality gates and smoke workflows. Phase
+9 predictive cooling control and later fault-detection and dashboard work remain
+future phases.
 
 Python 3.11 or newer is required. Install the project and development tools with
 `python -m pip install -e ".[dev]"`, then run `python -m pytest`.

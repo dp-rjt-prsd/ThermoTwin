@@ -2,7 +2,7 @@
 
 ## Overview
 
-This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, and model-agnostic multi-step forecast engine for Phases 0-8. Phase 7-8 implementation is present; its final orchestrator integration audit remains pending as TASK-45 and Checkpoint P8. `AGENTS.md` is authoritative where project documents conflict.
+This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, and model-agnostic multi-step forecast engine for Phases 0-8. Phases 7-8 and their orchestrator integration audit are complete. `AGENTS.md` is authoritative where project documents conflict.
 
 ## Frozen Architecture Decisions
 
@@ -167,8 +167,10 @@ Phase 6 completion evidence: 875 pytest tests passed; Ruff and strict mypy check
 - TASK-42: Define the model-agnostic `ThermalForecaster` contract and MLP adapter for physical-unit one-step predictions.
 - TASK-43: Roll out autoregressively with explicit action/exogenous-condition inputs, persistence defaults, and no future-temperature leakage.
 - TASK-44: Measure physical-unit forecast error across held-out trajectories at exact 30, 60, and 120 second horizons.
-- TASK-45: Reconcile exports, scripts, and documentation, then run the Phase 7-8 repository audit. This final audit remains pending.
+- TASK-45: Reconcile exports, scripts, and documentation, then run the Phase 7-8 repository audit.
 - Checkpoint P8: data-only and physics-informed checkpoints can be loaded behind the same forecaster interface; required-horizon evaluations, full quality gates, and smoke workflows pass.
+
+Phase 7-8 completion evidence: 1,000 pytest tests passed; Ruff and strict mypy checks passed; baseline, dataset-generation, Phase 6 training, data-vs-physics comparison, and exact-horizon forecast smoke commands passed. The smoke comparison did not demonstrate physics-informed superiority, and the smoke forecast error increased substantially from 30 to 120 seconds; these results validate execution and artifact integrity only.
 
 ## Risks and Mitigations
 

@@ -222,8 +222,9 @@
   - Acceptance: horizon/timestep compatibility is validated and MAE/RMSE/maximum cell error are measured by horizon over whole held-out trajectories for either trained model variant.
   - Verify: `python -m pytest tests/test_forecast_evaluation.py tests/test_forecast_script.py`; `python scripts/evaluate_forecasts.py --smoke-test`.
   - Dependencies: TASK-43.
-- [ ] TASK-45 Perform the Phase 7-8 integration audit.
+- [x] TASK-45 Perform the Phase 7-8 integration audit.
   - Acceptance: exports/docs are reconciled; full pytest, Ruff, strict mypy, comparison smoke, and forecast smoke pass; measured artifacts are reviewed for plausibility and no unsupported superiority claim is made.
   - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests scripts`; both new smoke scripts.
   - Dependencies: TASK-44.
-- [ ] Checkpoint P8: physics-informed models and required-horizon forecast engine accepted for predictive-controller work.
+- [x] Checkpoint P8: physics-informed models and required-horizon forecast engine accepted for predictive-controller work.
+  - Audit evidence: 1,000 pytest tests passed; Ruff and strict mypy passed; baseline, dataset, Phase 6 training, Phase 7 comparison, and Phase 8 forecast smoke commands passed. Smoke results are workflow evidence only: they did not establish physics-informed superiority and showed substantial autoregressive error growth with horizon.
