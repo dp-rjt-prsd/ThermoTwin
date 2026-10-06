@@ -1,0 +1,19 @@
+# Illustrative prototype assumptions, not manufacturer data.
+sampling:
+  duration_s: 120.0
+  time_step_s: 1.0
+  initial_soc_fraction_range: [0.2, 0.95]
+  initial_cell_temperature_k_range: [285.0, 315.0]
+  ambient_temperature_k_range: [283.0, 313.0]
+  coolant_inlet_temperature_k_range: [285.0, 300.0]
+  peak_current_a_range: [10.0, 250.0]
+  coolant_mass_flow_kg_s_range: [0.0, 0.1]
+  cell_resistance_scale_range: [0.8, 1.8]
+  neighbor_thermal_resistance_scale_range: [0.7, 1.5]
+  cooling_effectiveness_scale_range: [0.7, 1.4]
+  allowed_profile_names:
+    - constant
+    - pulse
+    - stop_and_go
+    - aggressive
+    - fast_charging

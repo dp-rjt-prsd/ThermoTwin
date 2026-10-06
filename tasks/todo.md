@@ -114,7 +114,7 @@
   - Acceptance: scalar nominal resistance remains default; optional positive finite tuples are immutable and pack-length checked by reset.
   - Verify: `python -m pytest tests/test_types.py tests/test_environment.py`.
   - Dependencies: TASK-20.
-- [ ] TASK-22 Freeze dataset and sampling contracts.
+- [x] TASK-22 Freeze dataset and sampling contracts.
   - Acceptance: scenario and transition records preserve state/action/next-state provenance; sampling ranges are explicit, validated, and represented in YAML.
   - Verify: `python -m pytest tests/test_data_types.py`.
   - Dependencies: TASK-21.
