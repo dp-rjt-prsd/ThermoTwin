@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,7 @@ from thermotwin.control.predictive_types import (
     PredictiveObjectiveWeights,
 )
 from thermotwin.core import (
+    CoolingAction,
     CoolingConfig,
     EnvironmentConfig,
     PackConfig,
@@ -32,12 +34,14 @@ from thermotwin.experiments import (
     save_experiment_result,
 )
 from thermotwin.models.artifacts import load_comparison_forecaster
+from thermotwin.models.forecaster import ThermalForecaster
 from thermotwin.scenarios import stop_and_go_profile
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SMOKE_STEP_COUNT = 20
 _NORMAL_STEP_COUNT = 120
 _PEAK_DISCHARGE_CURRENT_A = 120.0
+_FORECAST_HORIZONS_S = (30, 60, 120)
 _DEFAULT_COMPARISON_DIRECTORY = _PROJECT_ROOT / "results" / "model-comparison-1729"
 
 
@@ -327,6 +331,90 @@ def _json_text(value: object) -> str:
         raise ValueError(f"comparison summary is not valid JSON: {error}") from error
 
 
+def _forecast_snapshots(
+    results: dict[str, Any],
+    forecasters: dict[str, ThermalForecaster],
+    *,
+    rows: int,
+    columns: int,
+) -> dict[str, object]:
+    """Build post-run forecasts using only each run's final measured state."""
+    expected_cell_count = rows * columns
+    variants: dict[str, object] = {}
+    for variant, run_id in (
+        ("data_only", "predictive_data_only"),
+        ("physics_informed", "predictive_physics_informed"),
+    ):
+        result = results[run_id]
+        forecaster = forecasters[variant]
+        source_state = result.records[-1].state
+        if source_state.cell_temperatures_k.shape != (expected_cell_count,):
+            raise ValueError(
+                "measured source state does not match configured pack size"
+            )
+        if forecaster.cell_count != expected_cell_count:
+            raise ValueError(
+                "forecaster cell count does not match configured pack size"
+            )
+
+        action_flow = float(source_state.coolant_mass_flow_kg_s)
+        action = CoolingAction(action_flow)
+        predictions: list[dict[str, object]] = []
+        for horizon_s in _FORECAST_HORIZONS_S:
+            step_count = round(horizon_s / forecaster.time_step_s)
+            if step_count <= 0 or not math.isclose(
+                horizon_s,
+                step_count * forecaster.time_step_s,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                raise ValueError(
+                    f"forecast horizon {horizon_s}s is not an exact timestep multiple"
+                )
+            rollout = forecaster.rollout(
+                source_state,
+                tuple(action for _ in range(step_count)),
+            )
+            temperatures = rollout.cell_temperatures_k
+            if temperatures.shape != (step_count, expected_cell_count):
+                raise ValueError("forecast rollout has an unexpected temperature shape")
+            if not all(
+                math.isfinite(float(value)) and float(value) > 0.0
+                for value in temperatures.flat
+            ):
+                raise ValueError(
+                    "forecast rollout temperatures must be finite and positive"
+                )
+            predictions.append(
+                {
+                    "horizon_s": horizon_s,
+                    "cell_temperatures_k": [float(value) for value in temperatures[-1]],
+                }
+            )
+
+        source_temperatures = [
+            float(value) for value in source_state.cell_temperatures_k
+        ]
+        if not all(
+            math.isfinite(value) and value > 0.0 for value in source_temperatures
+        ):
+            raise ValueError("measured source temperatures must be finite and positive")
+        variants[variant] = {
+            "source": {
+                "measured_time_s": float(source_state.time_s),
+                "cell_temperatures_k": source_temperatures,
+            },
+            "action_coolant_mass_flow_kg_s": action_flow,
+            "predictions": predictions,
+        }
+    return {
+        "schema_version": 1,
+        "pack": {"rows": rows, "columns": columns},
+        "horizons_s": list(_FORECAST_HORIZONS_S),
+        "variants": variants,
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run and persist all four controller variants on identical inputs."""
     args = _parser().parse_args(argv)
@@ -358,6 +446,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         physics_forecaster = load_comparison_forecaster(
             comparison_directory, "physics_informed", **common_forecaster_args
         )
+        forecasters: dict[str, ThermalForecaster] = {
+            "data_only": data_forecaster,
+            "physics_informed": physics_forecaster,
+        }
         pid = settings["pid"]
         controllers = (
             (
@@ -410,6 +502,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "artifact_path": artifact_directory.relative_to(output).as_posix(),
             }
 
+        result_by_id = {run_id: result for run_id, _variant, result in results}
+        snapshot_path = output / "forecast_snapshots.json"
+        snapshot_text = _json_text(
+            _forecast_snapshots(
+                result_by_id,
+                forecasters,
+                rows=environment.pack.rows,
+                columns=environment.pack.columns,
+            )
+        )
+        snapshot_path.write_text(snapshot_text, encoding="utf-8", newline="")
+
         summary: dict[str, object] = {
             "seed": args.seed,
             "scenario": {
@@ -420,6 +524,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "metadata": dict(scenario.metadata),
             },
             "runs": runs,
+            "forecast_snapshots_path": snapshot_path.relative_to(output).as_posix(),
         }
         summary_text = _json_text(summary)
         (output / "comparison_summary.json").write_text(

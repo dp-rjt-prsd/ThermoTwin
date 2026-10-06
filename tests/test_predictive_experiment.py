@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import csv
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -72,6 +74,75 @@ def test_smoke_comparison_saves_four_fair_runs_and_measured_summary(
         assert provenance["scenario"] == reference["scenario"]
         assert provenance["environment_config"] == reference["environment_config"]
         assert provenance["scenario_metadata"] == reference["scenario_metadata"]
+
+    forecast_path = output / "forecast_snapshots.json"
+    assert summary["forecast_snapshots_path"] == "forecast_snapshots.json"
+    forecast_bytes = forecast_path.read_bytes()
+    snapshots = json.loads(forecast_bytes)
+    assert set(snapshots) == {"schema_version", "pack", "horizons_s", "variants"}
+    assert snapshots["schema_version"] == 1
+    assert snapshots["pack"] == {"rows": 3, "columns": 4}
+    assert snapshots["horizons_s"] == [30, 60, 120]
+    assert set(snapshots["variants"]) == {"data_only", "physics_informed"}
+
+    for variant, run_id in (
+        ("data_only", "predictive_data_only"),
+        ("physics_informed", "predictive_physics_informed"),
+    ):
+        snapshot_variant = snapshots["variants"][variant]
+        assert set(snapshot_variant) == {
+            "source",
+            "action_coolant_mass_flow_kg_s",
+            "predictions",
+        }
+        source = snapshot_variant["source"]
+        assert set(source) == {"measured_time_s", "cell_temperatures_k"}
+        assert math.isfinite(source["measured_time_s"])
+        predictions = snapshot_variant["predictions"]
+        assert len(predictions) == 3
+        assert [prediction["horizon_s"] for prediction in predictions] == [30, 60, 120]
+        assert all(
+            set(prediction) == {"horizon_s", "cell_temperatures_k"}
+            for prediction in predictions
+        )
+
+        run_directory = output / summary["runs"][run_id]["artifact_path"]
+        with (run_directory / "timeseries.csv").open(
+            encoding="utf-8", newline=""
+        ) as stream:
+            measured_rows = list(csv.DictReader(stream))
+        final_row = measured_rows[-1]
+        assert source["measured_time_s"] == float(final_row["time_s"])
+        assert source["cell_temperatures_k"] == [
+            float(final_row[f"cell_temperature_{index}_k"]) for index in range(12)
+        ]
+        assert snapshot_variant["action_coolant_mass_flow_kg_s"] == float(
+            final_row["coolant_mass_flow_kg_s"]
+        )
+        assert len(source["cell_temperatures_k"]) == 12
+        assert all(
+            math.isfinite(value) and value > 0.0
+            for value in source["cell_temperatures_k"]
+        )
+        for prediction in predictions:
+            temperatures = prediction["cell_temperatures_k"]
+            assert len(temperatures) == 12
+            assert all(math.isfinite(value) and value > 0.0 for value in temperatures)
+        assert all(
+            key not in snapshots
+            for key in (
+                "timeseries",
+                "future_measured_temperatures_k",
+                "measured_trajectory",
+            )
+        )
+
+    repeated_output = tmp_path / "predictive-smoke-repeat"
+    repeated = _run_cli(
+        "--smoke-test", "--seed", "13", "--output-directory", str(repeated_output)
+    )
+    assert repeated.returncode == 0, repeated.stderr
+    assert (repeated_output / "forecast_snapshots.json").read_bytes() == forecast_bytes
 
 
 def test_existing_output_is_rejected_before_any_run_directory_is_written(
