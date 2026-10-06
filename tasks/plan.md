@@ -1,8 +1,8 @@
-# Implementation Plan: ThermoTwin Phases 0-5
+# Implementation Plan: ThermoTwin Phases 0-6
 
 ## Overview
 
-Build the tested foundation through a reproducible baseline-controller experiment and leakage-safe synthetic transition dataset required by `PLAN.md` Phases 0 through 5. `AGENTS.md` is authoritative where project documents conflict.
+Build the tested foundation through a reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, and pure data-driven thermal surrogate required by `PLAN.md` Phases 0 through 6. `AGENTS.md` is authoritative where project documents conflict.
 
 ## Frozen Architecture Decisions
 
@@ -18,6 +18,10 @@ Build the tested foundation through a reproducible baseline-controller experimen
 - Experiment traces contain one immutable post-step record per applied action. Pump energy is integrated over those records, and result serialization refuses to overwrite an existing run.
 - Dataset samples are immutable `(state_t, action_t, state_t+1)` transitions. Dataset splitting is performed only on whole trajectory identifiers.
 - Phase 5 may configure initial per-cell resistances, but time-varying fault injection and fault labels remain Phase 10 responsibilities.
+- Phase 6 uses a small PyTorch MLP to predict one-step cell-temperature deltas. It does not include physics loss, multi-step rollout, or predictive control.
+- Model inputs are ordered explicitly as current, SOC, current cell temperatures, ambient temperature, coolant inlet temperature, and applied coolant flow.
+- Feature and target normalization statistics are fitted only on training rows and persisted separately from tensor-only model weights.
+- Training artifacts are non-overwriting and include configuration, seed, history, normalization, evaluation metrics, and a `state_dict` checkpoint.
 
 ## Dependency DAG
 
@@ -50,6 +54,14 @@ TASK-00 repository bootstrap
                                                           -> TASK-25 trajectory split and persistence
                                                               -> TASK-26 dataset CLI integration
                                                                   -> TASK-27 Phase 3-5 audit
+                                                                      -> TASK-28 ML dependencies and training config
+                                                                          -> TASK-29 normalization contract
+                                                                              -> TASK-30 dataset loader
+                                                                                  -> TASK-31 thermal MLP
+                                                                                      -> TASK-32 deterministic trainer
+                                                                                          -> TASK-33 model evaluation
+                                                                                              -> TASK-34 training CLI integration
+                                                                                                  -> TASK-35 Phase 6 audit
 ```
 
 Tasks with disjoint files may run concurrently only after their shared dependency is accepted. No concurrent task may modify the same file.
@@ -108,6 +120,18 @@ Tasks with disjoint files may run concurrently only after their shared dependenc
 - TASK-27: Run the Phase 3-5 repository audit and update task status.
 - Checkpoint P5: no trajectory crosses split boundaries; smoke generation is deterministic; full pytest, Ruff, mypy, baseline, and dataset smoke commands pass.
 
+### Phase 6: Data-Driven Thermal Surrogate
+
+- TASK-28: Add PyTorch/pandas dependencies and explicit training configuration.
+- TASK-29: Implement immutable train-fitted normalization statistics.
+- TASK-30: Load and validate split CSV artifacts into normalized tensor datasets without future-state leakage.
+- TASK-31: Implement the configurable Linear/GELU thermal delta MLP.
+- TASK-32: Implement seeded mini-batch training, validation, early stopping, device selection, and tensor-only checkpointing.
+- TASK-33: Evaluate physical-unit MAE, RMSE, per-cell error, and worst-cell error.
+- TASK-34: Add `scripts/train_model.py --smoke-test` and persist reproducible training artifacts.
+- TASK-35: Run the Phase 6 repository audit and update documentation/status.
+- Checkpoint P6: repeated CPU smoke training is deterministic; the saved checkpoint reloads; evaluation is calculated in kelvin; full pytest, Ruff, mypy, and all smoke commands pass.
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
@@ -123,9 +147,12 @@ Tasks with disjoint files may run concurrently only after their shared dependenc
 | Artifact overwrite/path escape | High | Validate run IDs and reject existing destinations |
 | Temporal leakage | High | Split immutable transitions by trajectory ID only |
 | Sampling drift | Medium | Seed per trajectory index and persist sampled metadata |
+| Train/test normalization leakage | High | Fit statistics only from the training split and verify with deliberately shifted validation/test data |
+| Opaque or unsafe checkpoints | High | Save tensor-only `state_dict`; keep model/normalization/provenance in JSON and load with `weights_only=True` |
+| Training nondeterminism | Medium | Seed Python/NumPy/PyTorch, use an explicit DataLoader generator, and force CPU in smoke mode |
+| Misleading normalized metrics | High | Denormalize deltas and report evaluation errors in kelvin |
 
-## Open Questions Deferred Beyond Phase 5
+## Open Questions Deferred Beyond Phase 6
 
 - Differentiable backend strategy for reusing canonical equations in PyTorch physics loss.
-- Model normalization and checkpoint schema for Phase 6.
 - Forecaster state/action representation for Phase 8.
