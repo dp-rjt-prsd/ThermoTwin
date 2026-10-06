@@ -231,11 +231,11 @@
 
 ## Phase 9
 
-- [ ] TASK-46 Freeze predictive-controller configuration and candidate-evaluation contracts.
+- [x] TASK-46 Freeze predictive-controller configuration and candidate-evaluation contracts.
   - Acceptance: horizon, candidate count, legal flow bounds, safety limit, pump coefficient, and objective weights are immutable and validated; candidate results expose each cost component.
   - Verify: `python -m pytest tests/test_predictive_types.py`.
   - Dependencies: TASK-45.
-- [ ] TASK-49 Audit all Phase A contracts before logic work.
+- [x] TASK-49 Audit all Phase A contracts before logic work.
   - Acceptance: focused tests, Ruff, strict mypy, and diff review pass with no downstream implementation added prematurely.
   - Verify: `python -m pytest tests/test_predictive_types.py tests/test_types.py`; `python -m ruff check .`; `python -m mypy src tests scripts`.
   - Dependencies: TASK-46, TASK-47, TASK-48.
@@ -255,7 +255,7 @@
 
 ## Phase 10
 
-- [ ] TASK-47 Add the resistance-fault configuration contract.
+- [x] TASK-47 Add the resistance-fault configuration contract.
   - Acceptance: optional cell index, nonnegative start time, and multiplier greater than one are immutable, serializable, and validated without changing fault-free defaults.
   - Verify: `python -m pytest tests/test_types.py`.
   - Dependencies: TASK-45.
@@ -279,7 +279,7 @@
 
 ## Phase 11
 
-- [ ] TASK-48 Declare dashboard dependencies.
+- [x] TASK-48 Declare dashboard dependencies.
   - Acceptance: supported Plotly and Streamlit runtime constraints are declared without weakening existing quality tooling.
   - Verify: `python -m pytest tests/test_package.py`.
   - Dependencies: TASK-45.

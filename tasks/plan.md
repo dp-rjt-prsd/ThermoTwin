@@ -210,6 +210,8 @@ Phase 7-8 completion evidence: 1,000 pytest tests passed; Ruff and strict mypy c
 - TASK-60: Reconcile exports and documentation, then run the Phase 9-11 repository audit and dashboard smoke verification.
 - Checkpoint P11: the dashboard renders from saved artifacts and the full suite, Ruff, strict mypy, workflows, and UI smoke path pass.
 
+Phase 9-11 Phase A contract evidence: 1,096 pytest tests passed; Ruff and strict mypy passed. Predictive-control contracts, backward-compatible resistance-fault provenance, and dashboard dependency declarations are accepted. Downstream logic remains gated on these contracts.
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
