@@ -46,6 +46,11 @@ def _require_dimension(name: str, value: object) -> None:
         raise ValueError(f"{name} must be a positive integer")
 
 
+def _require_nonnegative_integer(name: str, value: object) -> None:
+    if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
+        raise ValueError(f"{name} must be a nonnegative integer")
+
+
 def _readonly_positive_vector(name: str, value: Any) -> FloatArray:
     try:
         array = np.array(value, dtype=np.float64, copy=True)
@@ -233,9 +238,37 @@ class SimulationConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ResistanceFaultConfig:
+    """Scheduled single-cell resistance fault, retained as simulator provenance."""
+
+    cell_index: int
+    start_time_s: float
+    resistance_multiplier: float
+
+    def __post_init__(self) -> None:
+        _require_nonnegative_integer("cell_index", self.cell_index)
+
+        for name in ("start_time_s", "resistance_multiplier"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, Real):
+                raise ValueError(f"{name} must be a finite real number")
+            try:
+                scalar = float(value)
+            except (OverflowError, ValueError) as error:
+                raise ValueError(f"{name} must be a finite real number") from error
+            if not math.isfinite(scalar):
+                raise ValueError(f"{name} must be finite")
+            if name == "start_time_s" and scalar < 0.0:
+                raise ValueError("start_time_s must be nonnegative")
+            if name == "resistance_multiplier" and scalar <= 1.0:
+                raise ValueError("resistance_multiplier must be greater than 1")
+
+
+@dataclass(frozen=True, slots=True)
 class EnvironmentConfig:
     """Configuration bundle for a battery environment."""
 
     pack: PackConfig
     cooling: CoolingConfig
     simulation: SimulationConfig
+    resistance_fault: ResistanceFaultConfig | None = None

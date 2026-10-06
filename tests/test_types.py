@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, asdict
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,7 @@ from thermotwin.core import (
     CoolingConfig,
     EnvironmentConfig,
     PackConfig,
+    ResistanceFaultConfig,
     SimulationConfig,
 )
 
@@ -309,8 +310,67 @@ def test_environment_config_holds_the_frozen_contracts() -> None:
     environment = EnvironmentConfig(make_pack(), make_cooling(), make_simulation())
 
     assert environment.pack.cell_count == 12
+    assert environment.resistance_fault is None
     with pytest.raises(FrozenInstanceError):
         environment.pack = make_pack(rows=2)  # type: ignore[misc]
+
+
+def test_resistance_fault_config_is_frozen_and_retained_as_provenance() -> None:
+    fault = ResistanceFaultConfig(
+        cell_index=4,
+        start_time_s=12.5,
+        resistance_multiplier=2.0,
+    )
+    environment = EnvironmentConfig(
+        make_pack(), make_cooling(), make_simulation(), resistance_fault=fault
+    )
+
+    assert environment.resistance_fault is fault
+    assert asdict(environment)["resistance_fault"] == {
+        "cell_index": 4,
+        "start_time_s": 12.5,
+        "resistance_multiplier": 2.0,
+    }
+    with pytest.raises(FrozenInstanceError):
+        fault.cell_index = 5  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        environment.resistance_fault = None  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("cell_index", -1),
+        ("cell_index", 1.5),
+        ("cell_index", True),
+        ("cell_index", "1"),
+        ("start_time_s", -0.01),
+        ("start_time_s", True),
+        ("start_time_s", "1"),
+        ("start_time_s", float("nan")),
+        ("start_time_s", float("inf")),
+        ("start_time_s", -float("inf")),
+        ("resistance_multiplier", 1.0),
+        ("resistance_multiplier", 0.5),
+        ("resistance_multiplier", True),
+        ("resistance_multiplier", "2"),
+        ("resistance_multiplier", float("nan")),
+        ("resistance_multiplier", float("inf")),
+        ("resistance_multiplier", -float("inf")),
+    ],
+)
+def test_resistance_fault_config_rejects_invalid_values(
+    field: str, value: Any
+) -> None:
+    values: dict[str, Any] = {
+        "cell_index": 1,
+        "start_time_s": 0.0,
+        "resistance_multiplier": 1.5,
+    }
+    values[field] = value
+
+    with pytest.raises(ValueError, match=field):
+        ResistanceFaultConfig(**values)
 
 
 def test_pack_and_simulation_yaml_load_into_environment_config() -> None:

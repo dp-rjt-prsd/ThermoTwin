@@ -7,6 +7,7 @@ from thermotwin.core.types import (
     CurrentProfile,
     EnvironmentConfig,
     PackConfig,
+    ResistanceFaultConfig,
     SimulationConfig,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "CurrentProfile",
     "EnvironmentConfig",
     "PackConfig",
+    "ResistanceFaultConfig",
     "SimulationConfig",
 ]
