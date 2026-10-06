@@ -13,8 +13,19 @@ from thermotwin.data.model_dataset import (
     load_model_datasets,
     target_names,
 )
+from thermotwin.data.physics_dataset import (
+    PhysicsDatasets,
+    PhysicsTransitionDataset,
+    build_physics_datasets,
+    physics_context,
+    physics_context_names,
+)
 from thermotwin.data.preprocessing import NormalizationStats, fit_normalization
 from thermotwin.data.sampling import sample_dataset_scenario
+from thermotwin.data.transition_artifacts import (
+    TransitionArtifacts,
+    load_transition_artifacts,
+)
 from thermotwin.data.types import (
     CoolantFlowProfile,
     DatasetMetadataValue,
@@ -42,4 +53,11 @@ __all__ = [
     "generate_dataset",
     "split_by_trajectory",
     "save_dataset_splits",
+    "TransitionArtifacts",
+    "load_transition_artifacts",
+    "physics_context_names",
+    "physics_context",
+    "PhysicsTransitionDataset",
+    "PhysicsDatasets",
+    "build_physics_datasets",
 ]
