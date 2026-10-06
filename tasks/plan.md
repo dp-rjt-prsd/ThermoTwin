@@ -212,6 +212,8 @@ Phase 7-8 completion evidence: 1,000 pytest tests passed; Ruff and strict mypy c
 
 Phase 9-11 Phase A contract evidence: 1,096 pytest tests passed; Ruff and strict mypy passed. Predictive-control contracts, backward-compatible resistance-fault provenance, and dashboard dependency declarations are accepted. Downstream logic remains gated on these contracts.
 
+Phase 9-10 completion evidence: 1,220 pytest tests passed; Ruff and strict mypy passed; the predictive comparison and fault-detection smoke workflows completed with saved artifacts. The predictive smoke produced identical zero-cooling metrics across all four variants and therefore supports workflow integrity only, not controller superiority. The fault smoke measured detection at 15 s, threshold crossing at 26 s, and 11 s lead time for its configured synthetic resistance fault.
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |

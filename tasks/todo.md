@@ -239,19 +239,19 @@
   - Acceptance: focused tests, Ruff, strict mypy, and diff review pass with no downstream implementation added prematurely.
   - Verify: `python -m pytest tests/test_predictive_types.py tests/test_types.py`; `python -m ruff check .`; `python -m mypy src tests scripts`.
   - Dependencies: TASK-46, TASK-47, TASK-48.
-- [ ] TASK-50 Implement the predictive objective.
+- [x] TASK-50 Implement the predictive objective.
   - Acceptance: peak temperature, spread, horizon pump energy, and safety penalty are calculated and exposed separately; nonfinite inputs fail.
   - Verify: `python -m pytest tests/test_predictive_objective.py`.
   - Dependencies: TASK-49.
-- [ ] TASK-51 Implement the receding-horizon predictive controller.
+- [x] TASK-51 Implement the receding-horizon predictive controller.
   - Acceptance: `np.linspace` candidates are rolled out through `ThermalForecaster`; minimum-cost ties are deterministic; only the first legal action is returned; reset is deterministic.
   - Verify: `python -m pytest tests/test_predictive_controller.py`.
   - Dependencies: TASK-50.
-- [ ] TASK-55 Add predictive closed-loop comparison artifacts.
+- [x] TASK-55 Add predictive closed-loop comparison artifacts.
   - Acceptance: threshold, PID, and predictive controllers run on an identical scenario; only measured metrics are saved and existing output paths are not overwritten.
   - Verify: `python -m pytest tests/test_predictive_experiment.py`; `python scripts/run_predictive.py --smoke-test`.
   - Dependencies: TASK-51.
-- [ ] Checkpoint P9: predictive cooling is accepted against reactive baselines.
+- [x] Checkpoint P9: predictive cooling is accepted against reactive baselines.
 
 ## Phase 10
 
@@ -259,23 +259,23 @@
   - Acceptance: optional cell index, nonnegative start time, and multiplier greater than one are immutable, serializable, and validated without changing fault-free defaults.
   - Verify: `python -m pytest tests/test_types.py`.
   - Dependencies: TASK-45.
-- [ ] TASK-52 Integrate scheduled resistance faults into the simulator.
+- [x] TASK-52 Integrate scheduled resistance faults into the simulator.
   - Acceptance: the selected cell resistance changes once at the exact schedule boundary, affects Joule heating, reset restores the schedule, and other cells remain unchanged.
   - Verify: `python -m pytest tests/test_environment_faults.py`.
   - Dependencies: TASK-49.
-- [ ] TASK-53 Implement persistent rolling thermal anomaly detection.
+- [x] TASK-53 Implement persistent rolling thermal anomaly detection.
   - Acceptance: residuals equal measured minus forecast temperatures; rolling scores are per-cell; isolated spikes do not trigger; persistent abnormal residuals report cell, score, time, predicted hotspot, and severity.
   - Verify: `python -m pytest tests/test_anomaly.py`.
   - Dependencies: TASK-52.
-- [ ] TASK-54 Implement fault lead-time measurement.
+- [x] TASK-54 Implement fault lead-time measurement.
   - Acceptance: threshold time minus detection time is reported from measured events, including zero/negative lead and no-crossing cases without invented values.
   - Verify: `python -m pytest tests/test_fault_metrics.py`.
   - Dependencies: TASK-53.
-- [ ] TASK-56 Add the saved fault-detection workflow.
+- [x] TASK-56 Add the saved fault-detection workflow.
   - Acceptance: inference receives no fault label; fault provenance, residual trace, detection event, threshold crossing, and lead time are persisted separately and reproducibly.
   - Verify: `python -m pytest tests/test_fault_experiment.py`; `python scripts/run_fault_detection.py --smoke-test`.
   - Dependencies: TASK-54.
-- [ ] Checkpoint P10: simulator-owned fault injection and persistent anomaly detection are accepted.
+- [x] Checkpoint P10: simulator-owned fault injection and persistent anomaly detection are accepted.
 
 ## Phase 11
 
