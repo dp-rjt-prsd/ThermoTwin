@@ -183,6 +183,7 @@ def test_saves_csv_metrics_and_full_provenance(tmp_path: Path) -> None:
                 "coolant_inlet_temperature_k": 290.0,
                 "initial_current_a": 0.0,
                 "initial_cell_temperatures_k": [299.0, 300.0],
+                "initial_cell_resistances_ohm": None,
             },
         },
         "scenario_metadata": {"peak_current_a": 12.5, "profile": "two-pulse"},

@@ -142,6 +142,7 @@ def test_smoke_comparison_saves_fair_provenance_and_measured_metrics(
         "coolant_inlet_temperature_k": 293.15,
         "initial_current_a": 0.0,
         "initial_cell_temperatures_k": None,
+        "initial_cell_resistances_ohm": None,
     }
 
     for name, directory in run_directories.items():
