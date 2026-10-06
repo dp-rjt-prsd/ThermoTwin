@@ -90,10 +90,9 @@ def make_scenario(**overrides: Any) -> ExperimentScenario:
 
 def make_result(**overrides: Any) -> ExperimentResult:
     values: dict[str, Any] = {
-        "scenario_name": "nominal",
+        "scenario": make_scenario(),
         "controller_name": "threshold",
         "seed": 4,
-        "time_step_s": 1.0,
         "records": (make_record(1.0), make_record(2.0)),
         "metrics": make_metrics(),
     }
@@ -180,9 +179,21 @@ def test_record_rejects_non_battery_state() -> None:
 
 
 def test_result_constructs_from_records_and_is_frozen() -> None:
-    result = make_result()
+    scenario = make_scenario(duration_s=4.0, time_step_s=2.0)
+    result = make_result(
+        scenario=scenario,
+        records=(make_record(2.0), make_record(4.0)),
+    )
 
-    assert result.records[0].state.time_s == 1.0
+    assert result.scenario is scenario
+    assert result.scenario.environment_config == make_environment_config()
+    assert result.scenario.environment_config is scenario.environment_config
+    assert result.scenario.current_profile is scenario.current_profile
+    assert result.scenario.duration_s == 4.0
+    assert result.scenario_name == result.scenario.name
+    assert result.scenario_name == "nominal"
+    assert result.time_step_s == 2.0
+    assert result.records[0].state.time_s == 2.0
     with pytest.raises(FrozenInstanceError):
         result.seed = 9  # type: ignore[misc]
 
@@ -199,9 +210,7 @@ def test_result_copies_records_to_nonempty_immutable_tuple() -> None:
 
 
 @pytest.mark.parametrize("name", ["", "  ", None, 1])
-def test_result_rejects_invalid_names(name: Any) -> None:
-    with pytest.raises(ValueError):
-        make_result(scenario_name=name)
+def test_result_rejects_invalid_controller_name(name: Any) -> None:
     with pytest.raises(ValueError):
         make_result(controller_name=name)
 
@@ -212,10 +221,34 @@ def test_result_rejects_invalid_seed(seed: Any) -> None:
         make_result(seed=seed)
 
 
-@pytest.mark.parametrize("time_step_s", [0.0, -1.0, float("nan"), float("inf"), True])
-def test_result_rejects_invalid_time_step(time_step_s: Any) -> None:
+def test_result_rejects_non_scenario_provenance() -> None:
     with pytest.raises(ValueError):
-        make_result(time_step_s=time_step_s)
+        make_result(scenario=object())
+
+
+def test_result_requires_the_scenario_contract_type_exactly() -> None:
+    class DerivedScenario(ExperimentScenario):
+        pass
+
+    scenario = make_scenario()
+    derived = DerivedScenario(
+        name=scenario.name,
+        environment_config=scenario.environment_config,
+        current_profile=scenario.current_profile,
+        duration_s=scenario.duration_s,
+        time_step_s=scenario.time_step_s,
+        thermal_limit_k=scenario.thermal_limit_k,
+        pump_power_coefficient_w_s3_kg3=scenario.pump_power_coefficient_w_s3_kg3,
+        metadata=scenario.metadata,
+    )
+    with pytest.raises(ValueError, match="ExperimentScenario"):
+        make_result(scenario=derived)
+
+
+def test_result_record_spacing_uses_scenario_time_step() -> None:
+    scenario = make_scenario(duration_s=1.0, time_step_s=0.5)
+    with pytest.raises(ValueError, match="time_step_s spacing"):
+        make_result(scenario=scenario)
 
 
 def test_result_rejects_empty_or_invalid_records() -> None:

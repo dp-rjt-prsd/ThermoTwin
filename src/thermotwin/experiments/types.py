@@ -144,19 +144,19 @@ class ExperimentRecord:
 class ExperimentResult:
     """Immutable experiment trace and precomputed aggregate metrics."""
 
-    scenario_name: str
+    scenario: ExperimentScenario
     controller_name: str
     seed: int
-    time_step_s: float
     records: tuple[ExperimentRecord, ...]
     metrics: ExperimentMetrics
     metadata: Mapping[str, MetadataValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        _nonempty_name("scenario_name", self.scenario_name)
+        if type(self.scenario) is not ExperimentScenario:
+            raise ValueError("scenario must be an ExperimentScenario")
         _nonempty_name("controller_name", self.controller_name)
         seed = _normalize_seed(self.seed)
-        time_step = _positive_finite("time_step_s", self.time_step_s)
+        time_step = self.scenario.time_step_s
         if not isinstance(self.records, (tuple, list)) or not self.records:
             raise ValueError(
                 "records must be a nonempty sequence of ExperimentRecord values"
@@ -192,6 +192,15 @@ class ExperimentResult:
         if not isinstance(self.metrics, ExperimentMetrics):
             raise ValueError("metrics must be an ExperimentMetrics")
         object.__setattr__(self, "seed", seed)
-        object.__setattr__(self, "time_step_s", time_step)
         object.__setattr__(self, "records", records)
         object.__setattr__(self, "metadata", _normalize_metadata(self.metadata))
+
+    @property
+    def scenario_name(self) -> str:
+        """Name derived from the retained scenario provenance."""
+        return self.scenario.name
+
+    @property
+    def time_step_s(self) -> float:
+        """Fixed timestep derived from the retained scenario provenance."""
+        return self.scenario.time_step_s
