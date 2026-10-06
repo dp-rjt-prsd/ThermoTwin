@@ -2,6 +2,7 @@ import tomllib
 from pathlib import Path
 
 import thermotwin.models as models
+import thermotwin.visualization as visualization
 from thermotwin import __version__
 from thermotwin.data import (
     ModelDatasets,
@@ -113,6 +114,53 @@ from thermotwin.models.physics_train import (
 )
 from thermotwin.models.physics_train import (
     train_physics_aware_mlp as train_physics_aware_mlp_module,
+)
+from thermotwin.visualization import (
+    controller_comparison_figure,
+    coolant_flow_figure,
+    fault_diagnostics_figure,
+    forecast_comparison_figure,
+    pack_heatmap_figure,
+    temperature_timeseries_figure,
+)
+from thermotwin.visualization.data import (
+    ControllerTrace as ControllerTraceModule,
+)
+from thermotwin.visualization.data import (
+    DashboardData as DashboardDataModule,
+)
+from thermotwin.visualization.data import (
+    FaultEvent as FaultEventModule,
+)
+from thermotwin.visualization.data import (
+    FaultSummary as FaultSummaryModule,
+)
+from thermotwin.visualization.data import (
+    FaultTrace as FaultTraceModule,
+)
+from thermotwin.visualization.data import (
+    ForecastSnapshot as ForecastSnapshotModule,
+)
+from thermotwin.visualization.data import (
+    load_dashboard_data as load_dashboard_data_module,
+)
+from thermotwin.visualization.plots import (
+    controller_comparison_figure as controller_comparison_figure_module,
+)
+from thermotwin.visualization.plots import (
+    coolant_flow_figure as coolant_flow_figure_module,
+)
+from thermotwin.visualization.plots import (
+    fault_diagnostics_figure as fault_diagnostics_figure_module,
+)
+from thermotwin.visualization.plots import (
+    forecast_comparison_figure as forecast_comparison_figure_module,
+)
+from thermotwin.visualization.plots import (
+    pack_heatmap_figure as pack_heatmap_figure_module,
+)
+from thermotwin.visualization.plots import (
+    temperature_timeseries_figure as temperature_timeseries_figure_module,
 )
 
 
@@ -250,3 +298,45 @@ def test_package_exposes_phase_eight_model_api() -> None:
     assert callable(evaluate_forecast_horizons)
     assert ThermalForecaster is not None
     assert MLPThermalForecaster is not None
+
+
+def test_package_exposes_phase_eleven_visualization_api() -> None:
+    assert visualization.__all__ == [
+        "ControllerTrace",
+        "DashboardData",
+        "FaultEvent",
+        "FaultSummary",
+        "FaultTrace",
+        "ForecastSnapshot",
+        "load_dashboard_data",
+        "controller_comparison_figure",
+        "coolant_flow_figure",
+        "fault_diagnostics_figure",
+        "forecast_comparison_figure",
+        "pack_heatmap_figure",
+        "temperature_timeseries_figure",
+    ]
+    assert visualization.ControllerTrace is ControllerTraceModule
+    assert visualization.DashboardData is DashboardDataModule
+    assert visualization.FaultEvent is FaultEventModule
+    assert visualization.FaultSummary is FaultSummaryModule
+    assert visualization.FaultTrace is FaultTraceModule
+    assert visualization.ForecastSnapshot is ForecastSnapshotModule
+    assert visualization.load_dashboard_data is load_dashboard_data_module
+    assert controller_comparison_figure is controller_comparison_figure_module
+    assert coolant_flow_figure is coolant_flow_figure_module
+    assert fault_diagnostics_figure is fault_diagnostics_figure_module
+    assert forecast_comparison_figure is forecast_comparison_figure_module
+    assert pack_heatmap_figure is pack_heatmap_figure_module
+    assert temperature_timeseries_figure is temperature_timeseries_figure_module
+    assert all(
+        callable(builder)
+        for builder in (
+            controller_comparison_figure,
+            coolant_flow_figure,
+            fault_diagnostics_figure,
+            forecast_comparison_figure,
+            pack_heatmap_figure,
+            temperature_timeseries_figure,
+        )
+    )

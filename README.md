@@ -6,7 +6,8 @@ of battery state and thermal behavior; the digital twin is a separate learned mo
 that estimates and forecasts that behavior for proactive cooling decisions.
 The learned model must not replace the simulator.
 
-Phases 0-8 are implemented. The system includes validated shared state and
+Phases 0-11 are implemented, with the final Phase 9-11 repository audit still
+pending. The system includes validated shared state and
 configuration contracts, a 12-cell electrothermal simulator, deterministic drive
 and charging profiles, threshold and PID cooling controllers, reproducible
 controller experiments, and trajectory-split synthetic datasets. Its thermal
@@ -29,9 +30,25 @@ The current smoke evidence establishes that these workflows execute and produce
 artifacts; it does not establish that the physics-informed model is superior. In
 the current smoke forecast, error grows substantially at longer horizons, so the
 smoke metrics must not be presented as a performance benchmark. The Phase 7-8
-integration audit passes the repository quality gates and smoke workflows. Phase
-9 predictive cooling control and later fault-detection and dashboard work remain
-future phases.
+integration audit passed its repository quality gates and smoke workflows.
+
+Phase 9 adds receding-horizon coolant-flow selection using model forecasts and
+compares predictive data-only and physics-informed twins with reactive threshold
+and PID controllers. Phase 10 adds simulator-owned resistance faults and
+persistence-based detection of fault-induced thermal anomalies. Phase 11 loads
+those saved predictive and fault artifacts into an interactive dashboard. The
+dashboard is artifact-driven: it never runs simulation or model training.
+
+The dashboard shows measured and horizon-selectable predicted 3 x 4 pack heatmaps,
+temperature and coolant-flow histories, saved reactive-versus-predictive controller
+metrics, data-only-versus-physics-informed forecasts, and fault-induced anomaly
+evidence including the configured/suspected cell, anomaly score, predicted hotspot,
+detection time, measured threshold crossing, and lead time. These synthetic
+experiments support claims about forecast and controller comparisons only to the
+extent shown in saved run artifacts. Smoke outputs validate workflow execution and
+artifact integrity; they do not establish that either learned model or controller
+is superior. Do not claim thermal-runaway detection or report performance values
+that are not present in saved experiment results.
 
 Python 3.11 or newer is required. Install the project and development tools with
 `python -m pip install -e ".[dev]"`, then run `python -m pytest`.
@@ -76,3 +93,23 @@ checkpoints and evaluation inputs, and provenance. Existing output directories
 are rejected rather than overwritten. Both new smoke commands are workflow checks
 only: their metrics are not evidence of comparative superiority, and the smoke
 forecast error grows substantially with horizon.
+
+Run the Phase 9-11 artifact workflow in order. Each selected predictive output
+directory must be new; the fault workflow also requires that its
+`fault-detection` output subdirectory does not already exist. Choose unused paths
+for each run:
+
+```bash
+python scripts/run_predictive.py --smoke-test --output-directory results/predictive-smoke
+python scripts/run_fault_detection.py --smoke-test --output-directory results/fault-smoke
+python scripts/run_dashboard.py --predictive-directory results/predictive-smoke --fault-directory results/fault-smoke
+```
+
+The predictive smoke trains temporary comparison models when needed and writes a
+`comparison_summary.json` with its controller artifacts. The fault smoke creates
+its own temporary model comparison when needed and saves the fault run under
+`results/fault-smoke/fault-detection/`. The dashboard launcher validates both
+artifact roots and opens Streamlit with those paths; the dashboard then reads the
+saved files only. Smoke measurements are workflow checks, not benchmark evidence
+for controller superiority. Use saved non-smoke experiment outputs for any
+quantitative comparison, and state the tested scenarios and metrics explicitly.

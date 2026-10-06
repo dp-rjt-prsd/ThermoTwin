@@ -9,6 +9,14 @@ from thermotwin.visualization.data import (
     ForecastSnapshot,
     load_dashboard_data,
 )
+from thermotwin.visualization.plots import (
+    controller_comparison_figure,
+    coolant_flow_figure,
+    fault_diagnostics_figure,
+    forecast_comparison_figure,
+    pack_heatmap_figure,
+    temperature_timeseries_figure,
+)
 
 __all__ = [
     "ControllerTrace",
@@ -18,4 +26,10 @@ __all__ = [
     "FaultTrace",
     "ForecastSnapshot",
     "load_dashboard_data",
+    "controller_comparison_figure",
+    "coolant_flow_figure",
+    "fault_diagnostics_figure",
+    "forecast_comparison_figure",
+    "pack_heatmap_figure",
+    "temperature_timeseries_figure",
 ]

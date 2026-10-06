@@ -2,7 +2,7 @@
 
 ## Overview
 
-This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, and model-agnostic multi-step forecast engine for Phases 0-8. Phases 9-11 add receding-horizon predictive cooling, simulator-owned resistance faults with persistent residual diagnostics, and an artifact-driven dashboard. `AGENTS.md` is authoritative where project documents conflict.
+This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, model-agnostic multi-step forecast engine, predictive cooling, simulator-owned resistance faults, and artifact-driven dashboard for Phases 0-11. The TASK-60 integration audit remains pending. `AGENTS.md` is authoritative where project documents conflict.
 
 ## Frozen Architecture Decisions
 
@@ -213,6 +213,8 @@ Phase 7-8 completion evidence: 1,000 pytest tests passed; Ruff and strict mypy c
 Phase 9-11 Phase A contract evidence: 1,096 pytest tests passed; Ruff and strict mypy passed. Predictive-control contracts, backward-compatible resistance-fault provenance, and dashboard dependency declarations are accepted. Downstream logic remains gated on these contracts.
 
 Phase 9-10 completion evidence: 1,220 pytest tests passed; Ruff and strict mypy passed; the predictive comparison and fault-detection smoke workflows completed with saved artifacts. The predictive smoke produced identical zero-cooling metrics across all four variants and therefore supports workflow integrity only, not controller superiority. The fault smoke measured detection at 15 s, threshold crossing at 26 s, and 11 s lead time for its configured synthetic resistance fault.
+
+Phase 11 pre-audit evidence: current scoped test collection comprises 25 artifact-loader tests (including parametrized invalid-artifact cases), 12 Plotly builder tests, and 7 dashboard/launcher tests. The valid-artifact loader path and headless launcher health path are covered by real artifact fixtures and launcher checks. These focused checks are pre-audit evidence only; TASK-60 must rerun them and the repository gates. Phase 11 is not accepted until TASK-60 gates pass. The new predictive output directory must not pre-exist; for fault detection, its `fault-detection` output subdirectory must not pre-exist. The dashboard health path reads these saved artifacts without starting simulation or training.
 
 ## Risks and Mitigations
 

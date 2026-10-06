@@ -283,15 +283,15 @@
   - Acceptance: supported Plotly and Streamlit runtime constraints are declared without weakening existing quality tooling.
   - Verify: `python -m pytest tests/test_package.py`.
   - Dependencies: TASK-45.
-- [ ] TASK-57 Implement dashboard artifact loading and immutable view data.
+- [x] TASK-57 Implement dashboard artifact loading and immutable view data.
   - Acceptance: controller/model/fault artifacts are validated, missing or malformed data fails clearly, and 12-cell topology is preserved.
   - Verify: `python -m pytest tests/test_dashboard_data.py`.
   - Dependencies: TASK-55, TASK-56.
-- [ ] TASK-58 Implement reusable Plotly figures.
+- [x] TASK-58 Implement reusable Plotly figures.
   - Acceptance: 3x4 measured/predicted heatmaps, temperature and coolant-flow traces, thresholds, and comparison figures are produced without Streamlit or simulator imports.
   - Verify: `python -m pytest tests/test_visualization_plots.py`.
   - Dependencies: TASK-57.
-- [ ] TASK-59 Integrate the Streamlit dashboard.
+- [x] TASK-59 Integrate the Streamlit dashboard.
   - Acceptance: the dashboard renders metric cards, selectable prediction horizon, controller/model comparisons, and fault details exclusively from loaded artifacts.
   - Verify: `python -m pytest tests/test_dashboard.py`; dashboard headless smoke command.
   - Dependencies: TASK-58.
