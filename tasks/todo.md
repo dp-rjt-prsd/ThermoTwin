@@ -102,11 +102,11 @@
   - Acceptance: validated run IDs produce trace CSV, metrics JSON, and provenance JSON; existing destinations and path-like identifiers are rejected.
   - Verify: `python -m pytest tests/test_experiment_serialization.py`.
   - Dependencies: TASK-17.
-- [ ] TASK-20 Add baseline experiment integration.
+- [x] TASK-20 Add baseline experiment integration.
   - Acceptance: `scripts/run_baseline.py` compares controllers under the same scenario, seed, initial state, and duration and emits only measured results.
   - Verify: `python scripts/run_baseline.py --smoke-test` plus full quality gates.
   - Dependencies: TASK-18, TASK-19.
-- [ ] Checkpoint P4: reproducible controller experiments and artifacts accepted.
+- [x] Checkpoint P4: reproducible controller experiments and artifacts accepted.
 
 ## Phase 5
 
