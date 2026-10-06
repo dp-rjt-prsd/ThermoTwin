@@ -118,15 +118,15 @@
   - Acceptance: scenario and transition records preserve state/action/next-state provenance; sampling ranges are explicit, validated, and represented in YAML.
   - Verify: `python -m pytest tests/test_data_types.py`.
   - Dependencies: TASK-21.
-- [ ] TASK-23 Implement the deterministic parameter sampler.
+- [x] TASK-23 Implement the deterministic parameter sampler.
   - Acceptance: sampling varies initial state, current profile, flow, resistance, thermal coupling, and cooling effectiveness within declared ranges and is stable per seed/index.
   - Verify: `python -m pytest tests/test_sampling.py`.
   - Dependencies: TASK-22.
-- [ ] TASK-24 Implement trajectory generation.
+- [x] TASK-24 Implement trajectory generation.
   - Acceptance: every transition is produced by `BatteryEnvironment`, is contiguous, uses the sampled action, and carries trajectory metadata without simulator-truth leakage into controllers.
   - Verify: `python -m pytest tests/test_data_generate.py`.
   - Dependencies: TASK-22.
-- [ ] TASK-25 Implement trajectory-level split and persistence.
+- [x] TASK-25 Implement trajectory-level split and persistence.
   - Acceptance: train/validation/test trajectory IDs are disjoint, seeded splits are deterministic, flattened rows retain all 12 cell states, and files never silently overwrite.
   - Verify: `python -m pytest tests/test_dataset.py`.
   - Dependencies: TASK-22.
