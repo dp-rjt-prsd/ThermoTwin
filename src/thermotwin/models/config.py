@@ -88,3 +88,22 @@ class TrainerConfig:
             raise ValueError("patience must not exceed max_epochs")
         if self.device_policy not in ("auto", "cpu", "cuda"):
             raise ValueError("device_policy must be 'auto', 'cpu', or 'cuda'")
+
+
+@dataclass(frozen=True, slots=True)
+class PhysicsLossConfig:
+    """Weight and watt scale for a normalized physics residual loss."""
+
+    lambda_physics: float
+    residual_scale_w: float
+
+    def __post_init__(self) -> None:
+        weight = _finite_real("lambda_physics", self.lambda_physics)
+        if weight < 0.0:
+            raise ValueError("lambda_physics must be nonnegative")
+        object.__setattr__(self, "lambda_physics", weight)
+
+        residual_scale = _finite_real("residual_scale_w", self.residual_scale_w)
+        if residual_scale <= 0.0:
+            raise ValueError("residual_scale_w must be positive")
+        object.__setattr__(self, "residual_scale_w", residual_scale)

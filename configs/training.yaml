@@ -24,3 +24,13 @@ smoke_test:
   min_improvement: 0.0
   weight_decay: 0.0
   device_policy: cpu
+
+# The physics-loss multiplier is dimensionless. Residuals are normalized by each
+# characteristic power scale, in watts, before the squared physics loss is formed.
+physics_loss:
+  standard:
+    lambda_physics: 0.1
+    residual_scale_w: 10.0
+  smoke_test:
+    lambda_physics: 0.1
+    residual_scale_w: 10.0

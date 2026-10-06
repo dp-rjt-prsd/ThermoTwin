@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from thermotwin.models import MLPConfig, TrainerConfig
+from thermotwin.models.config import PhysicsLossConfig
 
 
 def test_mlp_config_is_immutable_and_accepts_baseline_dimensions() -> None:
@@ -108,11 +109,56 @@ def test_trainer_config_rejects_invalid_device_policy(device: Any) -> None:
         TrainerConfig(7, 64, 0.001, 100, 10, 0.0001, 0.0, device)
 
 
+def test_physics_loss_config_is_immutable_and_normalizes_values() -> None:
+    config = PhysicsLossConfig(lambda_physics=0, residual_scale_w=2)
+
+    assert config.lambda_physics == 0.0
+    assert config.residual_scale_w == 2.0
+    assert not hasattr(config, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        config.lambda_physics = 1.0  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("weight", [0, 0.25, 10])
+def test_physics_loss_config_accepts_finite_nonnegative_weight(weight: Any) -> None:
+    assert PhysicsLossConfig(weight, 1.0).lambda_physics == float(weight)
+
+
+@pytest.mark.parametrize("scale", [0.01, 1, 250])
+def test_physics_loss_config_accepts_finite_positive_scale(scale: Any) -> None:
+    assert PhysicsLossConfig(0.1, scale).residual_scale_w == float(scale)
+
+
+@pytest.mark.parametrize(
+    ("weight", "scale"),
+    [
+        (True, 1.0),
+        (-0.01, 1.0),
+        (float("nan"), 1.0),
+        (float("inf"), 1.0),
+        (float("-inf"), 1.0),
+        (0.1, True),
+        (0.1, 0),
+        (0.1, -1.0),
+        (0.1, float("nan")),
+        (0.1, float("inf")),
+        (0.1, float("-inf")),
+        ("0.1", 1.0),
+        (0.1, None),
+    ],
+)
+def test_physics_loss_config_rejects_invalid_values(weight: Any, scale: Any) -> None:
+    with pytest.raises(ValueError):
+        PhysicsLossConfig(weight, scale)
+
+
 def test_training_yaml_defines_baseline_and_smoke_settings() -> None:
     raw = yaml.safe_load(Path("configs/training.yaml").read_text(encoding="utf-8"))
     model = MLPConfig(**raw["model"])
     normal = TrainerConfig(**raw["training"])
     smoke = TrainerConfig(**raw["smoke_test"])
+    physics = PhysicsLossConfig(**raw["physics_loss"]["standard"])
+    smoke_physics = PhysicsLossConfig(**raw["physics_loss"]["smoke_test"])
 
     assert (model.input_dim, model.output_dim, model.hidden_widths) == (
         17,
@@ -125,6 +171,10 @@ def test_training_yaml_defines_baseline_and_smoke_settings() -> None:
     assert smoke.device_policy == "cpu"
     assert smoke.max_epochs < normal.max_epochs
     assert smoke.batch_size < normal.batch_size
+    assert physics.lambda_physics >= 0
+    assert physics.residual_scale_w > 0
+    assert smoke_physics.lambda_physics == physics.lambda_physics
+    assert smoke_physics.residual_scale_w == physics.residual_scale_w
 
 
 def test_model_config_contracts_do_not_import_torch() -> None:
