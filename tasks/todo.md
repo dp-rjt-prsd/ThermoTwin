@@ -90,7 +90,7 @@
   - Acceptance: peak/mean temperature, maximum spread, pump energy, violating sample count, and time above limit are calculated from explicit post-step records.
   - Verify: `python -m pytest tests/test_metrics.py`.
   - Dependencies: TASK-15.
-- [ ] TASK-17 Freeze experiment contracts.
+- [x] TASK-17 Freeze experiment contracts.
   - Acceptance: scenario, post-step record, and result types are immutable, validate durations/units/provenance, and carry structured metrics.
   - Verify: `python -m pytest tests/test_experiment_types.py`.
   - Dependencies: TASK-16.
