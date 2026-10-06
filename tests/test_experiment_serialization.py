@@ -13,6 +13,7 @@ from thermotwin.core import (
     CoolingConfig,
     EnvironmentConfig,
     PackConfig,
+    ResistanceFaultConfig,
     SimulationConfig,
 )
 from thermotwin.diagnostics.metrics import ExperimentMetrics
@@ -24,7 +25,9 @@ from thermotwin.experiments.types import (
 )
 
 
-def make_environment_config() -> EnvironmentConfig:
+def make_environment_config(
+    resistance_fault: ResistanceFaultConfig | None = None,
+) -> EnvironmentConfig:
     return EnvironmentConfig(
         pack=PackConfig(
             rows=1,
@@ -53,13 +56,20 @@ def make_environment_config() -> EnvironmentConfig:
             initial_current_a=0.0,
             initial_cell_temperatures_k=(299.0, 300.0),
         ),
+        resistance_fault=resistance_fault,
     )
 
 
-def make_result() -> ExperimentResult:
+def make_result(
+    environment_config: EnvironmentConfig | None = None,
+) -> ExperimentResult:
     scenario = ExperimentScenario(
         name="pulse-load",
-        environment_config=make_environment_config(),
+        environment_config=(
+            make_environment_config()
+            if environment_config is None
+            else environment_config
+        ),
         current_profile=lambda _time_s: 0.0,
         duration_s=2.0,
         time_step_s=1.0,
@@ -175,6 +185,7 @@ def test_saves_csv_metrics_and_full_provenance(tmp_path: Path) -> None:
                 "flow_heat_transfer_gain": 500.0,
                 "flow_exponent": 0.8,
             },
+            "resistance_fault": None,
             "simulation": {
                 "default_time_step_s": 1.0,
                 "initial_soc_fraction": 0.5,
@@ -191,6 +202,27 @@ def test_saves_csv_metrics_and_full_provenance(tmp_path: Path) -> None:
         "seed": 17,
         "result_metadata": {"model": "physics-informed", "trial": 3},
         "record_count": 2,
+    }
+
+
+def test_saves_resistance_fault_configuration_in_provenance(
+    tmp_path: Path,
+) -> None:
+    fault = ResistanceFaultConfig(
+        cell_index=1,
+        start_time_s=1.5,
+        resistance_multiplier=2.5,
+    )
+    result = make_result(make_environment_config(resistance_fault=fault))
+    run_directory = save_experiment_result(result, tmp_path, "fault-run")
+
+    provenance = json.loads(
+        (run_directory / "provenance.json").read_text(encoding="utf-8")
+    )
+    assert provenance["environment_config"]["resistance_fault"] == {
+        "cell_index": 1,
+        "start_time_s": 1.5,
+        "resistance_multiplier": 2.5,
     }
 
 
