@@ -94,11 +94,11 @@
   - Acceptance: scenario, post-step record, and result types are immutable, validate durations/units/provenance, and carry structured metrics.
   - Verify: `python -m pytest tests/test_experiment_types.py`.
   - Dependencies: TASK-16.
-- [ ] TASK-18 Implement the experiment runner.
+- [x] TASK-18 Implement the experiment runner.
   - Acceptance: the runner resets controller/environment, applies one action per exact timestep, records post-step truth, computes metrics, and repeats deterministically.
   - Verify: `python -m pytest tests/test_experiment_runner.py`.
   - Dependencies: TASK-17.
-- [ ] TASK-19 Implement non-overwriting result serialization.
+- [x] TASK-19 Implement non-overwriting result serialization.
   - Acceptance: validated run IDs produce trace CSV, metrics JSON, and provenance JSON; existing destinations and path-like identifiers are rejected.
   - Verify: `python -m pytest tests/test_experiment_serialization.py`.
   - Dependencies: TASK-17.
