@@ -310,8 +310,11 @@ def _dataset_directory_path(directory: object) -> Path:
         raise ValueError(f"invalid dataset directory path: {error}") from error
 
 
-def load_model_datasets(directory: str | os.PathLike[str]) -> ModelDatasets:
-    """Load validated split artifacts and normalize them using train rows only."""
+def load_model_datasets(
+    directory: str | os.PathLike[str],
+    normalization: NormalizationStats | None = None,
+) -> ModelDatasets:
+    """Load split artifacts, fitting on train rows or reusing supplied statistics."""
     root = _dataset_directory_path(directory)
     if not root.is_dir():
         raise ValueError("dataset directory must exist and be a directory")
@@ -337,9 +340,25 @@ def load_model_datasets(directory: str | os.PathLike[str]) -> ModelDatasets:
 
     feature_order = feature_names(count)
     target_order = target_names(count)
-    stats = fit_normalization(
-        raw_features["train"], raw_targets["train"], feature_order, target_order
-    )
+    if normalization is None:
+        stats = fit_normalization(
+            raw_features["train"], raw_targets["train"], feature_order, target_order
+        )
+    else:
+        if type(normalization) is not NormalizationStats:
+            raise TypeError("normalization must be a NormalizationStats or None")
+        if normalization.feature_names != feature_order:
+            raise ValueError("normalization feature_names do not match dataset schema")
+        if normalization.target_names != target_order:
+            raise ValueError("normalization target_names do not match dataset schema")
+        if (
+            normalization.feature_mean.size != len(feature_order)
+            or normalization.feature_scale.size != len(feature_order)
+            or normalization.target_mean.size != len(target_order)
+            or normalization.target_scale.size != len(target_order)
+        ):
+            raise ValueError("normalization dimensions do not match dataset schema")
+        stats = normalization
     datasets: dict[str, ThermalTransitionDataset] = {}
     for split in _SPLITS:
         frame = frames[split]

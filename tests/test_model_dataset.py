@@ -17,6 +17,7 @@ from thermotwin.data.model_dataset import (
     load_model_datasets,
     target_names,
 )
+from thermotwin.data.preprocessing import NormalizationStats
 from thermotwin.data.types import TransitionRecord
 
 
@@ -119,6 +120,46 @@ def test_validation_and_test_shift_does_not_change_train_fitted_stats(
     np.testing.assert_array_equal(
         first.normalization.target_scale, shifted.normalization.target_scale
     )
+
+
+def test_loader_reuses_external_normalization_without_refitting(tmp_path: Path) -> None:
+    reference = load_model_datasets(_artifacts(tmp_path / "reference"))
+    shifted_dir = _artifacts(tmp_path / "shifted", (5000, 8000))
+    train_path = shifted_dir / "train.csv"
+    train = pd.read_csv(train_path)
+    train["state_current_a"] += 5000.0
+    train["state_cell_temperature_0_k"] += 2000.0
+    train["next_state_cell_temperature_0_k"] += 2000.0
+    train.to_csv(train_path, index=False)
+
+    shifted = load_model_datasets(shifted_dir, reference.normalization)
+    refitted = load_model_datasets(shifted_dir)
+
+    assert shifted.normalization is reference.normalization
+    assert np.max(np.abs(shifted.validation.features)) > 1000.0
+    assert shifted.train.features[0, 0] > 1000.0
+    assert not np.array_equal(
+        refitted.normalization.feature_mean, reference.normalization.feature_mean
+    )
+
+
+def test_loader_rejects_external_normalization_with_different_names(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = _artifacts(tmp_path / "data")
+    incompatible = load_model_datasets(artifact_dir).normalization
+
+    invalid = NormalizationStats(
+        ("wrong", *incompatible.feature_names[1:]),
+        incompatible.target_names,
+        incompatible.feature_mean,
+        incompatible.feature_scale,
+        incompatible.target_mean,
+        incompatible.target_scale,
+    )
+
+    with pytest.raises(ValueError, match="feature_names"):
+        load_model_datasets(artifact_dir, invalid)
 
 
 def test_dataset_defensively_owns_arrays_and_is_map_style() -> None:
