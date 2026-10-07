@@ -215,25 +215,32 @@ def make_artifacts(tmp_path: Path) -> tuple[Path, Path]:
     _write_json(
         predictive / "forecast_snapshots.json",
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "pack": {"rows": 3, "columns": 4},
             "horizons_s": [30, 60, 120],
+            "source_run_id": "threshold",
+            "source": {
+                "measured_time_s": 2.0,
+                "cell_temperatures_k": [301.0] * 12,
+            },
+            "action_coolant_mass_flow_kg_s": 0.1,
             "variants": {
                 variant: {
-                    "source": {
-                        "measured_time_s": 2.0,
-                        "cell_temperatures_k": [301.0] * 12,
-                    },
-                    "action_coolant_mass_flow_kg_s": 0.1,
                     "predictions": [
                         {
                             "horizon_s": horizon,
-                            "cell_temperatures_k": [301.0 + horizon / 100] * 12,
+                            "cell_temperatures_k": [
+                                301.0 + horizon / 100 + offset
+                            ]
+                            * 12,
                         }
                         for horizon in (30, 60, 120)
                     ],
                 }
-                for variant in ("data_only", "physics_informed")
+                for variant, offset in (
+                    ("data_only", 0.0),
+                    ("physics_informed", 0.5),
+                )
             },
         },
     )
@@ -276,6 +283,28 @@ def test_loads_valid_artifacts_and_returns_immutable_data(tmp_path: Path) -> Non
         60,
         120,
     )
+    data_only = data.model_forecasts["data_only"]
+    physics_informed = data.model_forecasts["physics_informed"]
+    assert data_only[0].source_time_s == physics_informed[0].source_time_s == 2.0
+    assert data_only[0].action_coolant_mass_flow_kg_s == 0.1
+    assert physics_informed[0].action_coolant_mass_flow_kg_s == 0.1
+    np.testing.assert_array_equal(
+        data_only[0].source_cell_temperatures_k,
+        physics_informed[0].source_cell_temperatures_k,
+    )
+    for snapshots in (data_only, physics_informed):
+        for snapshot in snapshots:
+            np.testing.assert_array_equal(
+                snapshot.source_cell_temperatures_k,
+                trace.cell_temperatures_k[-1],
+            )
+            assert not snapshot.source_cell_temperatures_k.flags.writeable
+            with pytest.raises(ValueError):
+                snapshot.source_cell_temperatures_k[0] = 0.0
+    assert not np.array_equal(
+        data_only[0].predicted_cell_temperatures_k,
+        physics_informed[0].predicted_cell_temperatures_k,
+    )
     assert data.fault_trace.scores.shape == (3, 12)
     assert np.isnan(data.fault_trace.scores[0]).all()
 
@@ -313,6 +342,11 @@ def test_accepts_fault_run_directory_directly(tmp_path: Path) -> None:
         "metric",
         "trace",
         "snapshot",
+        "wrong_source_run",
+        "source_mismatch",
+        "action_mismatch",
+        "variant_source_forbidden",
+        "variant_action_forbidden",
         "fault_lead",
         "fault_provenance",
         "scenario_provenance",
@@ -363,7 +397,30 @@ def test_rejects_invalid_artifacts(tmp_path: Path, mutation: str) -> None:
     elif mutation == "snapshot":
         snapshots_path = predictive / "forecast_snapshots.json"
         snapshots = json.loads(snapshots_path.read_text(encoding="utf-8"))
-        snapshots["variants"]["data_only"]["source"]["measured_time_s"] = 1.0
+        snapshots["source"]["measured_time_s"] = 1.0
+        _write_json(snapshots_path, snapshots)
+    elif mutation == "wrong_source_run":
+        snapshots_path = predictive / "forecast_snapshots.json"
+        snapshots = json.loads(snapshots_path.read_text(encoding="utf-8"))
+        snapshots["source_run_id"] = "predictive_data_only"
+        _write_json(snapshots_path, snapshots)
+    elif mutation == "source_mismatch":
+        snapshots_path = predictive / "forecast_snapshots.json"
+        snapshots = json.loads(snapshots_path.read_text(encoding="utf-8"))
+        snapshots["source"]["cell_temperatures_k"][0] += 0.1
+        _write_json(snapshots_path, snapshots)
+    elif mutation == "action_mismatch":
+        snapshots_path = predictive / "forecast_snapshots.json"
+        snapshots = json.loads(snapshots_path.read_text(encoding="utf-8"))
+        snapshots["action_coolant_mass_flow_kg_s"] = 0.05
+        _write_json(snapshots_path, snapshots)
+    elif mutation in ("variant_source_forbidden", "variant_action_forbidden"):
+        snapshots_path = predictive / "forecast_snapshots.json"
+        snapshots = json.loads(snapshots_path.read_text(encoding="utf-8"))
+        key = "source" if mutation == "variant_source_forbidden" else (
+            "action_coolant_mass_flow_kg_s"
+        )
+        snapshots["variants"]["data_only"][key] = None
         _write_json(snapshots_path, snapshots)
     elif mutation == "fault_lead":
         summary_path = fault / "fault-detection" / "fault_summary.json"

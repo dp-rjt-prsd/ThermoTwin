@@ -181,11 +181,24 @@ def _load_forecasts(
     payload = json_mapping(read_json(path), "forecast_snapshots.json")
     exact_fields(
         payload,
-        ("schema_version", "pack", "horizons_s", "variants"),
+        (
+            "schema_version",
+            "pack",
+            "horizons_s",
+            "source_run_id",
+            "source",
+            "action_coolant_mass_flow_kg_s",
+            "variants",
+        ),
         "forecast_snapshots.json",
     )
-    if payload.get("schema_version") != 1:
-        raise ValueError("forecast_snapshots.json.schema_version must be 1")
+    if (
+        type(payload.get("schema_version")) is not int
+        or payload.get("schema_version") != 2
+    ):
+        raise ValueError("forecast_snapshots.json.schema_version must be 2")
+    if payload.get("source_run_id") != "threshold":
+        raise ValueError("forecast_snapshots.json.source_run_id must be 'threshold'")
     pack = json_mapping(payload.get("pack"), "forecast_snapshots.json.pack")
     exact_fields(pack, ("rows", "columns"), "forecast_snapshots.json.pack")
     if pack != {"rows": 3, "columns": 4}:
@@ -206,55 +219,55 @@ def _load_forecasts(
         "cooling.maximum_coolant_mass_flow_kg_s",
         minimum=0.0,
     )
-    result: dict[str, tuple[ForecastSnapshot, ...]] = {}
-    for variant, run_id in (
-        ("data_only", "predictive_data_only"),
-        ("physics_informed", "predictive_physics_informed"),
+    source = json_mapping(payload.get("source"), "forecast_snapshots.json.source")
+    exact_fields(
+        source,
+        ("measured_time_s", "cell_temperatures_k"),
+        "forecast_snapshots.json.source",
+    )
+    source_time = finite(
+        source.get("measured_time_s"),
+        "forecast_snapshots.json.source.measured_time_s",
+        minimum=0.0,
+    )
+    source_temperatures = frozen_array(
+        source.get("cell_temperatures_k"),
+        "forecast_snapshots.json.source.cell_temperatures_k",
+    )
+    if source_temperatures.shape != (12,) or np.any(source_temperatures <= 0.0):
+        raise ValueError(
+            "forecast_snapshots.json.source.cell_temperatures_k must contain "
+            "12 positive values"
+        )
+    source_trace = traces["threshold"]
+    if source_time != float(source_trace.time_s[-1]) or not np.array_equal(
+        source_temperatures, source_trace.cell_temperatures_k[-1]
     ):
+        raise ValueError(
+            "forecast_snapshots.json.source does not match threshold final measured row"
+        )
+    action_flow = finite(
+        payload.get("action_coolant_mass_flow_kg_s"),
+        "forecast_snapshots.json.action_coolant_mass_flow_kg_s",
+        minimum=0.0,
+    )
+    if not minimum_flow <= action_flow <= maximum_flow:
+        raise ValueError(
+            "forecast_snapshots.json.action_coolant_mass_flow_kg_s is outside "
+            "legal limits"
+        )
+    if action_flow != float(source_trace.coolant_mass_flow_kg_s[-1]):
+        raise ValueError(
+            "forecast snapshot action differs from threshold final trace action"
+        )
+    result: dict[str, tuple[ForecastSnapshot, ...]] = {}
+    for variant in ("data_only", "physics_informed"):
         raw_variant = json_mapping(variants[variant], f"forecast variants.{variant}")
         exact_fields(
             raw_variant,
-            ("source", "action_coolant_mass_flow_kg_s", "predictions"),
+            ("predictions",),
             f"forecast variants.{variant}",
         )
-        source = json_mapping(raw_variant.get("source"), f"{variant}.source")
-        exact_fields(
-            source,
-            ("measured_time_s", "cell_temperatures_k"),
-            f"forecast variants.{variant}.source",
-        )
-        source_time = finite(
-            source.get("measured_time_s"),
-            f"{variant}.source.measured_time_s",
-            minimum=0.0,
-        )
-        source_temperatures = frozen_array(
-            source.get("cell_temperatures_k"), f"{variant}.source.cell_temperatures_k"
-        )
-        if source_temperatures.shape != (12,) or np.any(source_temperatures <= 0.0):
-            raise ValueError(
-                f"{variant}.source.cell_temperatures_k must contain 12 positive values"
-            )
-        trace = traces[run_id]
-        if source_time != float(trace.time_s[-1]) or not np.array_equal(
-            source_temperatures, trace.cell_temperatures_k[-1]
-        ):
-            raise ValueError(
-                f"{variant}.source does not match {run_id} final measured row"
-            )
-        action_flow = finite(
-            raw_variant.get("action_coolant_mass_flow_kg_s"),
-            f"{variant}.action_coolant_mass_flow_kg_s",
-            minimum=0.0,
-        )
-        if not minimum_flow <= action_flow <= maximum_flow:
-            raise ValueError(
-                f"{variant}.action_coolant_mass_flow_kg_s is outside legal limits"
-            )
-        if action_flow != float(trace.coolant_mass_flow_kg_s[-1]):
-            raise ValueError(
-                f"{variant} forecast action differs from final predictive trace action"
-            )
         predictions = raw_variant.get("predictions")
         if not isinstance(predictions, list) or len(predictions) != len(_HORIZONS):
             raise ValueError(
