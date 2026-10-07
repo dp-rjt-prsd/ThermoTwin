@@ -673,8 +673,30 @@ def _validate_saved_test_csv(path: Path, manifest: dict[str, object]) -> None:
         not isinstance(columns, list)
         or not columns
         or any(type(item) is not str for item in columns)
+        or len(columns) != len(set(columns))
     ):
         raise ValueError("forecast dataset manifest columns are invalid")
+    trajectory_index = (
+        columns.index("trajectory_id") if "trajectory_id" in columns else -1
+    )
+    metadata_index = (
+        columns.index("metadata_json") if "metadata_json" in columns else -1
+    )
+    if trajectory_index < 0 or metadata_index < 0:
+        raise ValueError(
+            "forecast dataset schema requires trajectory_id and metadata_json"
+        )
+    raw_trajectory_ids = test_split.get("trajectory_ids")
+    if (
+        not isinstance(raw_trajectory_ids, list)
+        or not raw_trajectory_ids
+        or any(
+            type(value) is not str or not value.strip() for value in raw_trajectory_ids
+        )
+        or len(raw_trajectory_ids) != len(set(raw_trajectory_ids))
+    ):
+        raise ValueError("forecast test split trajectory_ids are invalid")
+    expected_trajectory_ids = set(raw_trajectory_ids)
     try:
         with path.open("r", encoding="utf-8", newline="") as stream:
             reader = csv.reader(stream, strict=True)
@@ -686,8 +708,35 @@ def _validate_saved_test_csv(path: Path, manifest: dict[str, object]) -> None:
         raise ValueError("forecast test CSV does not match its dataset manifest")
     if any(len(row) != len(columns) for row in rows):
         raise ValueError("forecast test CSV rows do not match the manifest columns")
+    observed_trajectory_ids: set[str] = set()
     for row_index, row in enumerate(rows):
         for column_index, value in enumerate(row):
+            if column_index == trajectory_index:
+                if not value.strip() or value not in expected_trajectory_ids:
+                    raise ValueError(
+                        "forecast test CSV contains a trajectory_id absent from "
+                        "its manifest"
+                    )
+                observed_trajectory_ids.add(value)
+                continue
+            if column_index == metadata_index:
+                try:
+                    metadata = json.loads(
+                        value,
+                        object_pairs_hook=_json_object,
+                        parse_constant=_reject_constant,
+                    )
+                except (ValueError, json.JSONDecodeError) as error:
+                    raise ValueError(
+                        f"forecast test CSV metadata_json is invalid at row {row_index}"
+                    ) from error
+                if not isinstance(metadata, dict):
+                    raise ValueError(
+                        "forecast test CSV metadata_json must be an object at row "
+                        f"{row_index}"
+                    )
+                _require_finite_json(metadata, f"metadata_json row {row_index}")
+                continue
             try:
                 number = float(value)
             except ValueError as error:
@@ -699,6 +748,21 @@ def _validate_saved_test_csv(path: Path, manifest: dict[str, object]) -> None:
                     "forecast test CSV contains non-finite value at "
                     f"{row_index}:{column_index}"
                 )
+    if observed_trajectory_ids != expected_trajectory_ids:
+        raise ValueError(
+            "forecast test CSV observed trajectory IDs do not match its manifest"
+        )
+
+
+def _require_finite_json(value: object, name: str) -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"{name} contains a non-finite JSON number")
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _require_finite_json(item, f"{name}.{key}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _require_finite_json(item, f"{name}[{index}]")
 
 
 def _forecast_metrics_for_distribution(

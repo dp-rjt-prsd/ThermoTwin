@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import shutil
 from dataclasses import replace
@@ -14,6 +16,7 @@ from test_benchmark_serialization import (
     _execution_with_evidence,
     save_benchmark_execution,
 )
+from thermotwin.data.model_dataset import _expected_columns
 from thermotwin.experiments.benchmark_types import (
     ArtifactReference,
     BenchmarkMatrix,
@@ -38,6 +41,19 @@ def _write_json(path: Path, value: object) -> None:
 
 def _write_nonfinite_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, allow_nan=True, indent=2, sort_keys=True) + "\n")
+
+
+def _replace_test_csv_value(path: Path, column: str, value: str) -> None:
+    with path.open("r", encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+    assert fieldnames is not None and rows
+    rows[0][column] = value
+    with path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _regression(mae: float) -> dict[str, Any]:
@@ -74,9 +90,22 @@ def _make_inputs(
     selected_comparison_smoke = (
         benchmark_mode == "quick" if comparison_smoke is None else comparison_smoke
     )
+    manifests: dict[str, dict[str, Any]] = {}
+    for distribution in _DISTRIBUTIONS:
+        manifest_path = f"dataset/{distribution}/manifest.json"
+        manifest = json.loads(evidence[manifest_path])
+        manifest["columns"] = list(_expected_columns(12))
+        manifests[distribution] = manifest
+        evidence[manifest_path] = (
+            json.dumps(manifest, sort_keys=True, indent=2).encode() + b"\n"
+        )
     comparison_provenance_path = "comparison/provenance.json"
     comparison_provenance = json.loads(evidence[comparison_provenance_path])
     comparison_provenance["smoke_test"] = selected_comparison_smoke
+    for distribution in _DISTRIBUTIONS:
+        comparison_provenance["datasets"][distribution]["manifest"] = manifests[
+            distribution
+        ]
     evidence[comparison_provenance_path] = (
         json.dumps(comparison_provenance, sort_keys=True, indent=2).encode() + b"\n"
     )
@@ -92,6 +121,15 @@ def _make_inputs(
                 model_provenance,
                 training_mode=selected_training_mode,
                 comparison_provenance=comparison_reference,
+                dataset_manifests=tuple(
+                    ArtifactReference(
+                        f"dataset/{distribution}/manifest.json",
+                        hashlib.sha256(
+                            evidence[f"dataset/{distribution}/manifest.json"]
+                        ).hexdigest(),
+                    )
+                    for distribution in _DISTRIBUTIONS
+                ),
             )
             cell = replace(cell, model_provenance=model_provenance)
         cells.append(cell)
@@ -160,11 +198,17 @@ def _make_inputs(
         dataset_manifest = json.loads(source_manifest.read_text(encoding="utf-8"))
         test_split = dataset_manifest["splits"]["test"]
         csv_header = dataset_manifest["columns"]
-        test_csv = ",".join(csv_header) + "\n"
-        test_csv += "".join(
-            ",".join("0" for _ in csv_header) + "\n"
-            for _ in range(test_split["row_count"])
-        )
+        test_ids = test_split["trajectory_ids"]
+        csv_stream = io.StringIO(newline="")
+        csv_writer = csv.DictWriter(csv_stream, fieldnames=csv_header)
+        csv_writer.writeheader()
+        for row_index in range(test_split["row_count"]):
+            row = {column: "0" for column in csv_header}
+            row["trajectory_id"] = test_ids[row_index % len(test_ids)]
+            row["step_index"] = str(row_index)
+            row["metadata_json"] = json.dumps({"row_index": row_index})
+            csv_writer.writerow(row)
+        test_csv = csv_stream.getvalue()
         dataset_files = {
             "evaluation_test_csv": (
                 test_csv.encode(),
@@ -367,6 +411,59 @@ def test_forecast_training_mode_must_match_comparison(tmp_path: Path) -> None:
     provenance["smoke_test"] = True
     _write_json(provenance_path, provenance)
     with pytest.raises(ValueError, match="evidence mode"):
+        aggregate_final_evaluation(
+            benchmark, comparison, id_forecast, ood_forecast, fault
+        )
+
+
+def test_unknown_forecast_trajectory_fails_closed(tmp_path: Path) -> None:
+    benchmark, comparison, id_forecast, ood_forecast, fault = _make_inputs(tmp_path)
+    _replace_test_csv_value(
+        id_forecast / "evaluated_dataset" / "test.csv",
+        "trajectory_id",
+        "unknown-trajectory",
+    )
+    with pytest.raises(ValueError, match="trajectory_id"):
+        aggregate_final_evaluation(
+            benchmark, comparison, id_forecast, ood_forecast, fault
+        )
+
+
+@pytest.mark.parametrize(
+    "metadata_value",
+    (
+        "{malformed",
+        '{"duplicate":1,"duplicate":2}',
+        '{"number":NaN}',
+        "[]",
+    ),
+)
+def test_invalid_forecast_metadata_json_fails_closed(
+    tmp_path: Path, metadata_value: str
+) -> None:
+    benchmark, comparison, id_forecast, ood_forecast, fault = _make_inputs(tmp_path)
+    _replace_test_csv_value(
+        id_forecast / "evaluated_dataset" / "test.csv",
+        "metadata_json",
+        metadata_value,
+    )
+    with pytest.raises(ValueError, match="metadata_json"):
+        aggregate_final_evaluation(
+            benchmark, comparison, id_forecast, ood_forecast, fault
+        )
+
+
+@pytest.mark.parametrize("value", ("NaN", "Infinity"))
+def test_nonfinite_forecast_physical_csv_value_fails_closed(
+    tmp_path: Path, value: str
+) -> None:
+    benchmark, comparison, id_forecast, ood_forecast, fault = _make_inputs(tmp_path)
+    _replace_test_csv_value(
+        id_forecast / "evaluated_dataset" / "test.csv",
+        "state_current_a",
+        value,
+    )
+    with pytest.raises(ValueError, match="non-finite"):
         aggregate_final_evaluation(
             benchmark, comparison, id_forecast, ood_forecast, fault
         )
