@@ -16,4 +16,7 @@ fault_detection:
     rolling_window_steps: 10
     score_threshold: 3.0
     persistence_steps: 3
-    epsilon_k: 0.000001
+    # Noise floor for the rolling residual spread (about one sensor resolution).
+    # Prevents tiny, harmless residual shifts (e.g. a coolant-flow step) from
+    # producing huge scores when the simulated residual is otherwise noise-free.
+    epsilon_k: 0.05
