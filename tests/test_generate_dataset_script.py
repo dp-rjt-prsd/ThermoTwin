@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 import os
 import subprocess
@@ -11,6 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -372,3 +374,132 @@ def test_smoke_generation_without_output_directory_uses_os_temp() -> None:
         if repository_data.exists()
         else set()
     ) == existing_entries
+
+
+def test_existing_output_directory_is_reported_without_traceback(
+    tmp_path: Path,
+) -> None:
+    output_directory = tmp_path / "existing-dataset"
+    output_directory.mkdir()
+    marker = output_directory / "keep.txt"
+    marker.write_text("preserve this file", encoding="utf-8")
+
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = os.pathsep.join(
+        part for part in (str(ROOT / "src"), environment.get("PYTHONPATH", "")) if part
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--smoke-test",
+            "--output-directory",
+            str(output_directory),
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert completed.stderr.startswith("generate_dataset: error: ")
+    assert len(completed.stderr.splitlines()) == 1
+    assert "Traceback" not in completed.stderr
+    assert marker.read_text(encoding="utf-8") == "preserve this file"
+    assert set(path.name for path in output_directory.iterdir()) == {"keep.txt"}
+
+
+def test_missing_config_is_reported_without_traceback(tmp_path: Path) -> None:
+    config_directory = tmp_path / "configs"
+    config_directory.mkdir()
+    for filename in ("pack.yaml", "simulation.yaml"):
+        (config_directory / filename).write_bytes(
+            (ROOT / "configs" / filename).read_bytes()
+        )
+
+    harness = (
+        "import importlib.util, pathlib, sys; "
+        "spec = importlib.util.spec_from_file_location('dataset_script', sys.argv[1]); "
+        "module = importlib.util.module_from_spec(spec); "
+        "spec.loader.exec_module(module); "
+        "module._PROJECT_ROOT = pathlib.Path(sys.argv[2]); "
+        "sys.exit(module.main(['--smoke-test', '--output-directory', sys.argv[3]]))"
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            harness,
+            str(SCRIPT),
+            str(tmp_path),
+            str(tmp_path / "dataset"),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert completed.stderr.startswith("generate_dataset: error: ")
+    assert len(completed.stderr.splitlines()) == 1
+    assert "dataset.yaml" in completed.stderr
+    assert "Traceback" not in completed.stderr
+    assert not (tmp_path / "dataset").exists()
+
+
+def test_invalid_yaml_is_reported_without_traceback(tmp_path: Path) -> None:
+    config_directory = tmp_path / "configs"
+    config_directory.mkdir()
+    (config_directory / "pack.yaml").write_text("pack: [", encoding="utf-8")
+
+    harness = (
+        "import importlib.util, pathlib, sys; "
+        "spec = importlib.util.spec_from_file_location('dataset_script', sys.argv[1]); "
+        "module = importlib.util.module_from_spec(spec); "
+        "spec.loader.exec_module(module); "
+        "module._PROJECT_ROOT = pathlib.Path(sys.argv[2]); "
+        "sys.exit(module.main(['--smoke-test', '--output-directory', sys.argv[3]]))"
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            harness,
+            str(SCRIPT),
+            str(tmp_path),
+            str(tmp_path / "dataset"),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert completed.stderr.startswith("generate_dataset: error: ")
+    assert len(completed.stderr.splitlines()) == 1
+    assert "Traceback" not in completed.stderr
+    assert not (tmp_path / "dataset").exists()
+
+
+def test_unexpected_type_error_from_generation_is_not_swallowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = importlib.util.spec_from_file_location("dataset_script", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module: Any = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def broken_generator(args: Any) -> int:
+        raise TypeError("unexpected programming defect")
+
+    monkeypatch.setattr(module, "_generate", broken_generator)
+
+    with pytest.raises(TypeError, match="unexpected programming defect"):
+        module.main(["--smoke-test"])

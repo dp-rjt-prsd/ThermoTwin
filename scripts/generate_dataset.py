@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import tempfile
 from collections.abc import Sequence
 from dataclasses import asdict, replace
@@ -142,6 +143,22 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Generate and persist a trajectory-split dataset, then print its summary."""
     args = _parser().parse_args(argv)
+    try:
+        return _generate(args)
+    except (
+        OSError,
+        ValueError,
+        yaml.YAMLError,
+    ) as error:
+        detail = " ".join(str(error).split()) or type(error).__name__
+        if len(detail) > 300:
+            detail = f"{detail[:297]}..."
+        print(f"generate_dataset: error: {detail}", file=sys.stderr)
+        return 2
+
+
+def _generate(args: argparse.Namespace) -> int:
+    """Run generation after argument parsing, leaving expected errors to ``main``."""
     environment_config, base_sampling_config, source_config_files = _load_configs(
         ood=args.ood
     )
