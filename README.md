@@ -1,271 +1,209 @@
 # ThermoTwin
 
-ThermoTwin is a prototype battery thermal management system for a simulated
-12-cell EV pack. The physical simulator remains authoritative. Two learned twins
-forecast cell temperatures: a data-only model and a physics-informed model. The
-predictive controllers use those forecasts to choose coolant flow and are compared
-with a reactive threshold controller and a PID controller.
+**A physics-informed digital twin for predictive EV battery cooling.**
 
-Phases 0–12, including Checkpoint P12C, are implemented and audited. Phase 12
-provides a deterministic six-scenario, four-variant evaluation and artifact-driven
-figures. The saved release evaluation is a `quick` benchmark and is labeled
-`workflow_only`; it does not establish model or controller superiority.
+ThermoTwin is a computer model of a 12-cell electric-vehicle battery pack sitting
+on a liquid cold plate. It shows how a "digital twin" — a fast learned copy of the
+pack's thermal behaviour — can predict cell temperatures a few seconds ahead, and
+use that prediction to decide how much coolant to pump *before* the pack gets hot,
+instead of reacting after it already has.
 
-## Install
+Everything runs on a laptop. No battery hardware is needed: a physics simulator
+plays the role of the real pack.
 
-Use Python 3.11 or newer from the repository root:
+---
 
-```bash
-python -m pip install -e ".[dev]"
-python -m pytest
+## What is inside
+
+| Part | What it does |
+|---|---|
+| **Battery pack simulator** | 12 cells in a 3 × 4 grid. Each cell heats up from current (Joule heating, I²R), passes heat to its neighbours, loses heat to the air, and is cooled by a liquid cold plate. This is the "real" pack. |
+| **Two digital twins** | Small neural networks that learn to predict the next cell temperatures. One learns from data only; the other is also penalised when it breaks the energy balance (physics-informed). |
+| **Four cooling controllers** | *Threshold* and *PID* react to the measured temperature. Two *predictive* controllers try five coolant flow rates on the twin, look 12 seconds ahead, and pick the best trade-off between temperature, uniformity and pump energy. |
+| **Fault detector** | Compares measured and twin-predicted temperatures to spot a cell that is heating abnormally (for example, from increased internal resistance). |
+| **Dashboard** | An interactive control-room screen for exploring all of the above. |
+
+The cooling loop:
+
+```
+pack simulator ──measurements──► digital twin ──predicted temperatures──► controller
+       ▲                                                                       │
+       └──────────────────────────── coolant flow ◄──────────────────────────┘
 ```
 
-Ruff and strict mypy are also configured for the repository:
+---
 
-```bash
-python -m ruff check .
-python -m mypy src tests scripts
-```
+## How to run it
 
-## Quick benchmark
+You need **Python 3.11 or newer** and **Git**. The first install can take
+several minutes because it downloads PyTorch (the neural-network library).
 
-Run the full six-scenario by four-variant matrix for its configured quick
-duration (30 seconds per scenario):
+> Commands are shown for **Windows PowerShell**. On macOS or Linux, use `python3`
+> instead of `python` where needed, and activate the environment with
+> `source .venv/bin/activate`.
 
-```bash
-python scripts/benchmark.py --quick --seed 1729 --output-directory results/benchmark-quick-1729
-```
-
-If no `--comparison-directory` is supplied, the command trains smoke models in
-an operating-system temporary directory, removes those temporary inputs after
-publishing the benchmark, and writes the bundle to the requested output. Quick
-mode always reports `workflow_only`, including when you supply full-trained
-models. Its purpose is to check the workflow and artifacts, not performance.
-Every output directory in these instructions must be new and must not already
-exist; commands reject existing outputs rather than overwrite them. Choose fresh
-names for reruns.
-
-Without `--quick`, `scripts/benchmark.py` runs the configured 600-second full
-suite. Full mode requires `--comparison-directory` containing valid, full-trained
-model provenance and rejects smoke-trained checkpoints before running scenarios.
-For example, after creating `results/phase12-comparison` with the full workflow
-below:
-
-```bash
-python scripts/benchmark.py --seed 1729 --comparison-directory results/phase12-comparison --output-directory results/benchmark-full-1729
-```
-
-## Small workflow-only release evaluation with full-trained models
-
-The configured synthetic dataset trajectories are 120 seconds at a one-second
-timestep. This release chain uses six trajectories for each dataset to reproduce
-the small audit input scale. It trains full-mode comparison models, evaluates
-30, 60, and 120 second forecasts, runs a quick benchmark, and uses the smoke fault
-scenario. It is a workflow-only release evaluation, not a full statistical dataset
-or a full-duration benchmark. Run these commands in order. All dataset and result
-paths shown are examples and must not already exist. Each command creates a new
-artifact directory.
-
-```bash
-python scripts/generate_dataset.py --seed 1729 --trajectory-count 6 --output-directory data/processed/phase12-id-1729
-python scripts/generate_dataset.py --ood --seed 1730 --trajectory-count 6 --output-directory data/processed/phase12-ood-1730
-python scripts/compare_models.py --id-dataset-directory data/processed/phase12-id-1729 --ood-dataset-directory data/processed/phase12-ood-1730 --output-directory results/phase12-comparison
-python scripts/evaluate_forecasts.py --comparison-directory results/phase12-comparison --dataset-directory data/processed/phase12-id-1729 --output-directory results/phase12-forecast-id
-python scripts/evaluate_forecasts.py --comparison-directory results/phase12-comparison --dataset-directory data/processed/phase12-ood-1730 --output-directory results/phase12-forecast-ood
-python scripts/benchmark.py --quick --seed 1729 --comparison-directory results/phase12-comparison --output-directory results/phase12-benchmark-quick
-python scripts/run_fault_detection.py --smoke-test --comparison-directory results/phase12-comparison --model-variant physics_informed --seed 1729 --output-directory results/phase12-fault
-python scripts/final_evaluation.py --benchmark-directory results/phase12-benchmark-quick --comparison-directory results/phase12-comparison --id-forecast-directory results/phase12-forecast-id --ood-forecast-directory results/phase12-forecast-ood --fault-directory results/phase12-fault/fault-detection --output-directory results/phase12-final-evaluation
-```
-
-Each generated dataset contains six configured 120-second synthetic trajectories;
-the generator's larger default trajectory count would create a different dataset
-and would not reproduce this audit's input scale. The comparison trains both
-variants in full mode on the ID dataset and evaluates them on ID and shifted OOD
-data. Forecast evaluation requires every test trajectory to contain at least 120
-seconds of transitions. The benchmark is quick/workflow-only despite the
-full-trained models. The fault run uses `--smoke-test`, matching the saved fault
-evidence. The final evaluation command reads and validates the
-saved artifacts; it does not retrain models or rerun the benchmark. Its output
-contains `evaluation/final_evaluation.json`, `manifest.json`, and six standalone
-HTML figures under `figures/`.
-
-To create a descriptive full-benchmark evaluation, replace `--quick` in the
-benchmark command with full mode (omit that flag), use a new benchmark output
-directory, and pass that directory as `--benchmark-directory` to the final
-evaluation exporter. Full mode accepts only full-trained model artifacts. The
-export inherits the benchmark's evidence status; it does not upgrade workflow-only
-results merely because the checkpoints were trained in full mode.
-
-## Saved release results
-
-The locally generated and verified audit artifact at
-`results/phase12-final-evaluation` is a quick, `workflow_only` evaluation using
-full-trained models. Values below are descriptive summaries from that saved
-synthetic run; the command chain above describes its small workflow and is not a
-statistical study. Model errors are in kelvin;
-physics residuals are in watts. Each forecast result contains one forecast per
-distribution and horizon in this small release artifact.
-
-| One-step test data | Data-only MAE / RMSE (K) | Physics-informed MAE / RMSE (K) |
-|---|---:|---:|
-| In distribution | 0.342359 / 0.443430 | 0.363450 / 0.461772 |
-| Out of distribution | 3.290927 / 3.387537 | 3.167005 / 3.260634 |
-
-| Mean absolute physics residual | Data-only (W) | Physics-informed (W) |
-|---|---:|---:|
-| In distribution | 246.499 | 261.684 |
-| Out of distribution | 2369.467 | 2280.244 |
-
-| 120-second rollout MAE | Data-only (K) | Physics-informed (K) |
-|---|---:|---:|
-| In distribution | 30.192248 | 32.958024 |
-| Out of distribution | 241.878547 | 245.381359 |
-
-The six-scenario controller summaries are means across the configured scenarios.
-All four variants recorded 15 thermal-violation samples totaling 15 seconds in
-the saved benchmark.
-
-| Controller variant | Mean peak temperature (K) | Mean pump energy (J) |
-|---|---:|---:|
-| Reactive threshold | 306.986370 | 288.160417 |
-| PID | 307.110424 | 50.239445 |
-| Predictive with data-only twin | 307.042039 | 141.255697 |
-| Predictive with physics-informed twin | 307.105105 | 33.256022 |
-
-The saved fault case suspected cell index 5 (C6), detected at 15 seconds, crossed
-the configured threshold at 26 seconds, and recorded an 11-second lead. This is
-fault-induced thermal anomaly evidence, not thermal-runaway detection.
-
-These values do not establish an overall winner, superiority, statistical
-significance, safety certification, or real-world generalization. The 120-second
-rollout errors are very large, especially OOD, and limit the forecasts' usefulness
-at that horizon. The evaluation covers six configured synthetic scenarios only;
-it is not a confidence interval or a population-level result. The fault artifact
-does not contain checkpoint/configuration hashes or an evidence-mode field, so
-the detector model cannot be cryptographically bound to the twin used in the
-evaluation.
-
-The `results/` directory is generated local output and is ignored by Git. These
-sample artifacts and their figures are not committed with the source repository.
-
-## Dashboard
-
-The Streamlit dashboard is a judge-focused thermal control room with four views:
-
-- **Guided Demo** walks through seven steps (energy enters, heat moves, cooling
-  responds, twin forecasts, controller decides, fault emerges, evidence). Each
-  step has its own visual built from saved evidence, ◀ Prev / Next ▶ navigation,
-  and the equations for that step. Examples: per-cell I²R heat, conduction arrows
-  sized by (T_hot − T_cold)/R_th, and measured vs forecast pack maps on one
-  shared colour scale.
-- **Live Thermal Lab** runs the authoritative pack simulator on demand. You set
-  load, environment, controller and fault conditions in one form, press
-  **Run simulation**, then play the result back with Play/Pause, 1×/2×/4× speed
-  and a scrub timeline. The heatmap, telemetry, energy-balance cards and chart
-  cursors move together. Predictive controllers always plan with their own saved
-  twin; reactive controllers can show a twin forecast overlay.
-- **Controllers & Twins** shows the six-scenario × four-controller benchmark,
-  one metric at a time, plus a scorecard, twin forecast error by horizon, physics
-  residuals, the saved controller time series, and provenance, limitations and
-  CSV/JSON downloads.
-- **Fault Lab** separates the operator view (suspected cell, score, detection
-  time, per-cell detector scores, pack state at detection) from the
-  evaluation-only injected-fault truth.
-
-Every view links its visuals to the thermal, control, model or diagnostic
-equations behind them, and the top bar's **Physics & Formulas** menu is an equation
-explorer. Display values
-use Celsius; hover text, provenance and downloads keep SI units and kelvin.
-Figures are built in `visualization/judge_figures.py`. The original Kelvin
-figures in `visualization/plots.py` remain for the artifact-level API.
-
-The dashboard never trains models. Guided Demo, Controllers & Twins and Fault Lab
-read validated saved artifacts only. The Live Thermal Lab runs the simulator and
-loads the saved twins from `results/phase12-final-comparison`. To create a
-dashboard-specific pair of runs, use new output directories and the same full
-comparison directory:
-
-```bash
-python scripts/run_predictive.py --comparison-directory results/phase12-comparison --seed 1729 --output-directory results/phase12-dashboard-predictive
-python scripts/run_fault_detection.py --comparison-directory results/phase12-comparison --model-variant physics_informed --seed 1729 --output-directory results/phase12-dashboard-fault
-python scripts/run_dashboard.py --predictive-directory results/phase12-dashboard-predictive --fault-directory results/phase12-dashboard-fault --evaluation-directory results/phase12-final-evaluation
-```
-
-`--evaluation-directory` is optional. It accepts a final-evaluation export, or its
-`evaluation/` folder, and feeds the benchmark and twin-accuracy panels. If you
-omit it, the dashboard uses `results/phase12-final-evaluation` when that folder
-exists. Otherwise those panels show a hint instead of charts.
-
-`run_dashboard.py` validates the artifacts and sets
-`THERMOTWIN_PREDICTIVE_RESULTS`, `THERMOTWIN_FAULT_RESULTS` and, when given,
-`THERMOTWIN_EVALUATION_RESULTS` for Streamlit. It also passes the dashboard
-theme, so it works from any directory, and it is the recommended way to launch.
-To launch Streamlit directly from PowerShell, set the variables first and pass
-the same theme flags the launcher uses:
+### Step 1 — Download and install (once)
 
 ```powershell
-$env:THERMOTWIN_PREDICTIVE_RESULTS = "results/phase12-dashboard-predictive"
-$env:THERMOTWIN_FAULT_RESULTS = "results/phase12-dashboard-fault"
-$env:THERMOTWIN_EVALUATION_RESULTS = "results/phase12-final-evaluation"
-python -m streamlit run src/thermotwin/visualization/dashboard.py --theme.base=dark --theme.primaryColor=#27C2D1 --theme.backgroundColor=#071018 --theme.secondaryBackgroundColor=#0D1822 --theme.textColor=#F3F7F9
+git clone https://github.com/dp-rjt-prsd/ThermoTwin.git
+cd ThermoTwin
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
 ```
 
-A local `.streamlit/config.toml` with the same `[theme]` values also works; that
-folder is git-ignored.
+This creates a private Python environment in the `.venv` folder and installs
+everything ThermoTwin needs. Next time, you only need `cd ThermoTwin` and
+`.venv\Scripts\Activate.ps1`.
 
-The artifact paths can also be changed at runtime from the **Evidence** menu in
-the top bar.
+### Step 2 — Create the results the dashboard shows (once, about 2 minutes)
 
-The layout follows a control-room design: a top navigation bar, a left rail
-(story steps or run conditions), a central canvas of header-bar cards with
-colour-tinted 3×4 pack tiles, and a right rail for live telemetry and safety
-monitoring. The HTML building blocks are in `visualization/ui_components.py` and
-the styling is in `visualization/presentation.py`.
+The repository holds the code, not the generated results. These commands build
+them: create training data, train both twins, test them, compare the controllers,
+and run a fault case. Run them **in order**, from the `ThermoTwin` folder:
 
-The authoritative health endpoint is `http://localhost:8501/_stcore/health`; a
-healthy server returns HTTP 200 with `ok`.
+```powershell
+python scripts/generate_dataset.py --seed 1729 --trajectory-count 6 --output-directory data/processed/id
+python scripts/generate_dataset.py --ood --seed 1730 --trajectory-count 6 --output-directory data/processed/ood
+python scripts/compare_models.py --id-dataset-directory data/processed/id --ood-dataset-directory data/processed/ood --output-directory results/phase12-final-comparison
+python scripts/evaluate_forecasts.py --comparison-directory results/phase12-final-comparison --dataset-directory data/processed/id --output-directory results/forecast-id
+python scripts/evaluate_forecasts.py --comparison-directory results/phase12-final-comparison --dataset-directory data/processed/ood --output-directory results/forecast-ood
+python scripts/benchmark.py --quick --seed 1729 --comparison-directory results/phase12-final-comparison --output-directory results/benchmark
+python scripts/run_fault_detection.py --smoke-test --comparison-directory results/phase12-final-comparison --model-variant physics_informed --seed 1729 --output-directory results/fault
+python scripts/final_evaluation.py --benchmark-directory results/benchmark --comparison-directory results/phase12-final-comparison --id-forecast-directory results/forecast-id --ood-forecast-directory results/forecast-ood --fault-directory results/fault/fault-detection --output-directory results/phase12-final-evaluation
+python scripts/run_predictive.py --comparison-directory results/phase12-final-comparison --seed 1729 --output-directory results/predictive
+```
 
-The export's self-contained Plotly figures are available without launching the
-dashboard:
+What each line does, in plain words:
 
-- `figures/controller_matrix.html`
-- `figures/model_accuracy.html`
-- `figures/forecast_errors.html`
-- `figures/physics_residuals.html`
-- `figures/thermal_energy_tradeoff.html`
-- `figures/fault_timing.html`
+| # | Step | Result |
+|---|---|---|
+| 1–2 | Simulate 6 normal operating runs (driving and charging) and 6 harsher "stress" runs (hotter, higher current, higher cell resistance) | Training and test data |
+| 3 | Train both twins on the normal data and test them on both | The two trained twins |
+| 4–5 | Check how well each twin predicts 30, 60 and 120 seconds ahead | Forecast accuracy |
+| 6 | Run all four controllers through six driving scenarios | Controller comparison |
+| 7 | Triple one cell's resistance and see whether the detector catches it | Fault-detection case |
+| 8 | Collect everything into one summary with charts | Final evaluation |
+| 9 | Record one short run of each controller for the dashboard | Dashboard time series |
 
-## Audit status and limitations
+The same seeds always give the same numbers.
 
-The release audit passed 1,459 pytest tests in 385.55 seconds, repository Ruff,
-and strict mypy across 138 source files. The final export was repeated
-byte-identically across its eight published files. Dashboard checks included 21
-focused tests and 10 later dashboard tests; Streamlit AppTest exercised 24
-control combinations without an exception. The headless health endpoint returned
-HTTP 200 with `ok`.
+### Step 3 — Open the dashboard
 
-The later four-view dashboard rework was checked in two ways:
+```powershell
+python scripts/run_dashboard.py --predictive-directory results/predictive --fault-directory results/fault --evaluation-directory results/phase12-final-evaluation
+```
 
-- **Automated checks:** focused pytest suites (`tests/test_dashboard.py`,
-  `tests/test_judge_figures.py`, `tests/test_visualization_plots.py`,
-  `tests/test_dashboard_presentation.py`), Ruff, and strict mypy. AppTest covers
-  every view, every Guided Demo step, all Live Lab paths (run, play/pause, scrub,
-  fault-start clamping), and each benchmark metric.
-- **Browser walkthrough:** the dashboard was driven in headless Microsoft Edge
-  over the DevTools protocol at 1600 px width, clicking through the views with
-  no rendered exceptions.
+Then open **http://localhost:8501** in your browser. Stop the dashboard with
+`Ctrl + C` in the terminal.
 
-The audit statement below still applies to the original release audit. The
-rework browser check was desktop-width only.
+The dashboard has four tabs:
 
-No real browser/DevTools tool was available for this audit. The narrow viewport
-and accessibility tree were therefore not visually verified, so responsive and
-accessibility risks remain. AppTest and the health endpoint confirm application
-execution, not a complete browser accessibility review.
+- **Guided Demo** — a 7-step story from cell heat to proactive cooling. Use
+  **Next ▶** to walk through; each step shows its own chart and equation.
+- **Live Thermal Lab** — set the current, temperatures, controller and an optional
+  cell fault, press **Run simulation**, then **▶ Play** to watch the pack heat up
+  and the coolant respond.
+- **Controllers & Twins** — compare the four controllers across six scenarios, and
+  see how accurate each twin is.
+- **Fault Lab** — what the operator sees when a cell starts overheating, kept
+  separate from the "answer key" of which cell was actually faulted.
 
-The actual-user audit also repaired checkpoint evidence being self-contained,
-quick/full benchmark mode decoupling, real forecast CSV and configuration
-provenance, strongest detector-event ranking, duplicate YAML key rejection,
-dataset CLI error handling, and the final evaluation export CLI. Predictive
-forecasts persist current exogenous inputs during rollout; future simulator truth
-and fault labels are not supplied to the predictor or controller.
+**Physics & Formulas** (top bar) explains every equation used.
+
+### If something goes wrong
+
+| Problem | Fix |
+|---|---|
+| `python` is not recognised | Install Python 3.11+ and tick "Add to PATH", or try `py` instead of `python`. |
+| Activating `.venv` is blocked in PowerShell | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, then try again. |
+| A step says the output folder **already exists** | The scripts never overwrite results. Delete that folder in `results/` (or `data/processed/`) and rerun the step. |
+| Port 8501 is busy | Close the other dashboard, or run `$env:STREAMLIT_SERVER_PORT=8502` before Step 3 and open `http://localhost:8502`. |
+| Live Lab says a twin could not be loaded | Step 2, line 3 must save to exactly `results/phase12-final-comparison`. |
+
+---
+
+## Results so far
+
+From the Step 2 run (six short synthetic scenarios, 30 seconds each). These are
+**descriptive results from a small simulated study**, not proof of real-world
+performance.
+
+**Cooling controllers** — average over six scenarios:
+
+| Controller | Average peak cell temperature | Average pump energy |
+|---|---:|---:|
+| Reactive threshold | 33.84 °C | 288.2 J |
+| Reactive PID | 33.96 °C | 50.2 J |
+| Predictive, data-only twin | 33.89 °C | 141.3 J |
+| Predictive, physics-informed twin | 33.96 °C | **33.3 J** |
+
+The physics-informed predictive controller used about **88 % less pump energy**
+than the threshold controller, with peak temperatures within 0.12 °C. All four
+controllers spent the same 15 s above the 40 °C limit in the high-current scenario.
+
+**Digital twins** — average prediction error one second ahead:
+
+| Test data | Data-only twin | Physics-informed twin |
+|---|---:|---:|
+| Similar to training | 0.34 °C | 0.36 °C |
+| Harsher than training | 3.29 °C | **3.17 °C** |
+
+On the harsher conditions, the physics-informed twin's worst single-cell error was
+16.6 % lower (4.98 °C vs 5.97 °C).
+
+**Fault detection** — a cell with triple resistance (C6) was flagged at 15 s and
+crossed 40 °C at 26 s: **11 seconds of warning**, without the detector being told
+which cell was faulty.
+
+**Known limits**
+
+- Predictions are good a few seconds ahead but drift badly over 60–120 seconds
+  (average errors of about 25–30 °C on normal data, far more on the harsher
+  data), so long-range forecasts are not yet reliable.
+- The study is small: six training runs and 30-second scenarios. It shows the
+  method works end to end; it does not establish statistical significance.
+- This detects abnormal heating from a resistance fault. It does **not** model or
+  detect thermal runaway.
+- The pump energy uses a simple cubic approximation (power ∝ flow³), not a
+  manufacturer's pump curve.
+
+---
+
+## Project layout
+
+```
+configs/      pack, cooling, controller, training and scenario settings (YAML)
+src/thermotwin/
+  physics/        cell heating, conduction, cooling, pack simulator
+  models/         the two digital twins, training and physics-informed loss
+  control/        threshold, PID and predictive controllers
+  diagnostics/    fault detector and performance metrics
+  experiments/    benchmark and evaluation runs
+  visualization/  the dashboard
+scripts/      the commands used in Steps 2 and 3
+tests/        automated checks
+```
+
+All physical values (cell mass 0.8 kg, heat capacity 900 J/kg·K, resistance
+15 mΩ, coolant flow 0–0.1 kg/s, 40 °C limit, …) live in `configs/` and are
+illustrative, not taken from a specific manufacturer's cell.
+
+---
+
+## For developers
+
+```powershell
+python -m pytest                    # run all automated tests
+python -m ruff check .              # code style
+python -m mypy src tests scripts    # type checks
+```
+
+- **Longer benchmark:** run `scripts/benchmark.py` without `--quick` (600 s per
+  scenario). It needs fully trained twins from Step 2, line 3.
+- **Standalone charts:** `results/phase12-final-evaluation/figures/` contains six
+  interactive HTML charts that open in any browser without the dashboard.
+- **Launching Streamlit directly** (without `run_dashboard.py`): set
+  `THERMOTWIN_PREDICTIVE_RESULTS`, `THERMOTWIN_FAULT_RESULTS` and optionally
+  `THERMOTWIN_EVALUATION_RESULTS`, then run
+  `python -m streamlit run src/thermotwin/visualization/dashboard.py`.
