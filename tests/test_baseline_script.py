@@ -10,6 +10,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, cast
 
+import yaml
+
 from thermotwin.diagnostics import ExperimentMetrics, calculate_experiment_metrics
 from thermotwin.experiments import (
     ExperimentRecord,
@@ -123,17 +125,10 @@ def test_smoke_comparison_saves_fair_provenance_and_measured_metrics(
         "peak_discharge_current_a": 120.0,
         "total_duration_s": 20.0,
     }
-    assert provenance["environment_config"]["pack"] == {
-        "rows": 3,
-        "columns": 4,
-        "cell_mass_kg": 0.8,
-        "cell_specific_heat_capacity_j_kg_k": 900.0,
-        "nominal_cell_resistance_ohm": 0.015,
-        "cell_capacity_ah": 50.0,
-        "neighbor_thermal_resistance_k_w": 1.5,
-        "ambient_thermal_resistance_k_w": 8.0,
-        "cell_cooling_surface_area_m2": 0.02,
-    }
+    pack_yaml = yaml.safe_load(
+        (ROOT / "configs" / "pack.yaml").read_text(encoding="utf-8")
+    )
+    assert provenance["environment_config"]["pack"] == pack_yaml["pack"]
     assert provenance["environment_config"]["simulation"] == {
         "default_time_step_s": 1.0,
         "initial_soc_fraction": 0.8,

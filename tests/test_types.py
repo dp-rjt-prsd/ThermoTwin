@@ -391,15 +391,15 @@ def test_pack_and_simulation_yaml_load_into_environment_config() -> None:
     assert config.pack.cell_count == 12
     assert config.pack.cell_mass_kg == 0.8
     assert config.pack.cell_specific_heat_capacity_j_kg_k == 900.0
-    assert config.pack.nominal_cell_resistance_ohm == 0.015
+    assert config.pack.nominal_cell_resistance_ohm == 0.003
     assert config.pack.cell_capacity_ah == 50.0
     assert config.pack.neighbor_thermal_resistance_k_w == 1.5
     assert config.pack.ambient_thermal_resistance_k_w == 8.0
     assert config.pack.cell_cooling_surface_area_m2 == 0.02
     assert config.cooling.minimum_coolant_mass_flow_kg_s == 0.0
     assert config.cooling.maximum_coolant_mass_flow_kg_s == 0.1
-    assert config.cooling.base_heat_transfer_coefficient_w_m2_k == 5.0
-    assert config.cooling.flow_heat_transfer_gain == 500.0
+    assert config.cooling.base_heat_transfer_coefficient_w_m2_k == 10.0
+    assert config.cooling.flow_heat_transfer_gain == 2000.0
     assert config.cooling.flow_exponent == 0.8
     assert config.simulation.default_time_step_s == 1.0
     assert config.simulation.initial_soc_fraction == 0.8
