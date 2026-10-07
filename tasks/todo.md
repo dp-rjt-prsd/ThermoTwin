@@ -337,11 +337,12 @@ Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of
   - Verify: `python -m pytest tests/test_benchmark_types.py`.
   - Dependencies: TASK-64.
   - Accepted: frozen contracts cover the 6x4 matrix, artifact/model provenance, no-future-truth assumptions, controller/model/forecast/physics/fault metrics, and full-mode smoke rejection. Review aligned distribution labels with saved artifacts and tightened detector/thermal invariants. Verification passed with 32 tests, Ruff, and strict mypy.
-- [ ] TASK-66 Implement deterministic six-scenario configuration and factory.
+- [x] TASK-66 Implement deterministic six-scenario configuration and factory.
   - Scope: `configs/benchmark.yaml`; `src/thermotwin/scenarios/benchmark.py`; `tests/test_benchmark_scenarios.py`.
   - Acceptance: normal, high-current, hot-ambient, weak-cooling, fast-charging, and resistance-fault scenarios are reproducible and valid; weak cooling reduces legal flow capacity only; one immutable scenario is shared by all variants.
   - Verify: `python -m pytest tests/test_benchmark_scenarios.py`.
   - Dependencies: TASK-65.
+  - Accepted: strict immutable quick/full cases cover all six scenarios with canonical seed-independent configuration digests and isolated ambient, cooling-capacity, charging, load, and resistance-fault changes. The shared pump coefficient remains `100000.0`. Verification passed with 25 tests, Ruff, and strict mypy.
 - [ ] TASK-67 Implement the four-variant controller factory and leakage regression.
   - Scope: `src/thermotwin/experiments/benchmark_controllers.py`; `tests/test_benchmark_controllers.py`.
   - Acceptance: threshold primary, PID supplemental, predictive/data-only, and predictive/physics-informed variants receive identical public state/scenario inputs; predictive variants use disclosed persistence through the forecaster and receive no future truth or fault label.

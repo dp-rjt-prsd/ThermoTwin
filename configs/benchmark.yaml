@@ -1,0 +1,69 @@
+# Reproducible Phase 12 benchmark definitions. Shared physical constants come
+# from pack.yaml and simulation.yaml; only listed scenario overrides vary.
+schema_version: 1
+quick_duration_s: 30.0
+full_duration_s: 600.0
+thermal_limit_k: 313.15
+pump_power_coefficient_w_s3_kg3: 100000.0
+
+# Every scenario entry has the same strict field set. Null means that the
+# corresponding profile or physical override is not active for that case.
+scenarios:
+  normal:
+    profile: stop_and_go
+    peak_current_a: 120.0
+    cycle_duration_s: 20.0
+    ambient_temperature_k: null
+    maximum_coolant_mass_flow_kg_s: null
+    fast_charge_taper_start_fraction: null
+    fast_charge_final_current_fraction: null
+    resistance_fault: null
+  high_current:
+    profile: aggressive_drive
+    peak_current_a: 240.0
+    cycle_duration_s: 20.0
+    ambient_temperature_k: null
+    maximum_coolant_mass_flow_kg_s: null
+    fast_charge_taper_start_fraction: null
+    fast_charge_final_current_fraction: null
+    resistance_fault: null
+  hot_ambient:
+    profile: stop_and_go
+    peak_current_a: 120.0
+    cycle_duration_s: 20.0
+    ambient_temperature_k: 313.15
+    maximum_coolant_mass_flow_kg_s: null
+    fast_charge_taper_start_fraction: null
+    fast_charge_final_current_fraction: null
+    resistance_fault: null
+  weak_cooling:
+    profile: stop_and_go
+    peak_current_a: 120.0
+    cycle_duration_s: 20.0
+    ambient_temperature_k: null
+    maximum_coolant_mass_flow_kg_s: 0.025
+    fast_charge_taper_start_fraction: null
+    fast_charge_final_current_fraction: null
+    resistance_fault: null
+  fast_charging:
+    profile: fast_charging
+    peak_current_a: 150.0
+    cycle_duration_s: null
+    ambient_temperature_k: null
+    maximum_coolant_mass_flow_kg_s: null
+    fast_charge_taper_start_fraction: 0.7
+    fast_charge_final_current_fraction: 0.2
+    resistance_fault: null
+  resistance_fault:
+    profile: stop_and_go
+    peak_current_a: 120.0
+    cycle_duration_s: 20.0
+    ambient_temperature_k: null
+    maximum_coolant_mass_flow_kg_s: null
+    fast_charge_taper_start_fraction: null
+    fast_charge_final_current_fraction: null
+    resistance_fault:
+      cell_index: 4
+      resistance_multiplier: 2.5
+      quick_start_time_s: 10.0
+      full_start_time_s: 120.0
