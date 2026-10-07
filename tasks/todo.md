@@ -301,7 +301,7 @@
   - Audit evidence: full pytest passed (1,265 passed in 373.04s); full Ruff passed; strict mypy passed for 120 source files; fresh predictive and fault smoke workflows passed; strict artifact loader accepted 4 controller traces, 2 model forecast sets, and a 30-step fault trace with a saved 11 s lead; documented dashboard launcher health returned HTTP 200 `ok`. Predictive smoke again produced identical metrics and zero cooling across all four variants, demonstrating workflow integrity only. Fault smoke measured detection at 15 s, threshold crossing at 26 s, lead 11 s, and peak 317.12793572865644 K. No controller or model superiority is demonstrated.
   - Dependencies: TASK-59.
 - [x] Checkpoint P11: predictive control, fault diagnostics, and artifact-driven dashboard accepted for benchmark-suite work.
-  - Next: Phase 12 benchmark suite; quantitative superiority has not yet been demonstrated.
+  - Next: statistical/generalization studies beyond Phase 12; the accepted descriptive benchmark does not establish quantitative superiority.
 
 ## Phase 12
 
@@ -371,22 +371,26 @@ Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of
   - Verify: rerun TASK-69 verification against fresh temporary outputs and compare manifests/metrics.
   - Dependencies: TASK-69.
   - Accepted: standalone quick bundle reloaded with 24 cells; deterministic reruns matched saved manifests and cell artifacts; full-mode smoke rejection passed. Evidence remains workflow-only and makes no superiority claim.
-- [ ] TASK-70 Aggregate final evaluation artifacts.
+- [x] TASK-70 Aggregate final evaluation artifacts.
   - Scope: `src/thermotwin/experiments/final_evaluation.py`; `tests/test_final_evaluation.py`.
   - Acceptance: saved-only aggregation reports ID/OOD MAE/RMSE/max error, 30/60/120-second errors, physics residual, controller peak/mean/spread, pump energy, safety count/duration, and fault lead time; incomplete/incompatible evidence fails; conclusions stay descriptive unless results support more.
   - Verify: `python -m pytest tests/test_final_evaluation.py`.
   - Dependencies: TASK-69, Checkpoint P12B.
-- [ ] TASK-71 Generate accessible presentation figures from saved evaluation data.
+  - Accepted: the exporter validates and aggregates the saved benchmark, model comparison, ID/OOD forecasts, and fault artifact without rerunning experiments. The final export repeated byte-identically across all eight published files. The saved values are descriptive; no overall winner or unsupported performance claim is reported.
+- [x] TASK-71 Generate accessible presentation figures from saved evaluation data.
   - Scope: `src/thermotwin/visualization/benchmark_plots.py`; `tests/test_benchmark_plots.py`.
   - Acceptance: figures cover controller matrix, ID/OOD/horizon errors, physics residual, thermal-energy tradeoffs, and fault timing with visible units, identities, evidence mode, and non-color cues; no hidden input or fabricated number is used.
   - Verify: `python -m pytest tests/test_benchmark_plots.py`.
   - Dependencies: TASK-70.
-- [ ] TASK-72 Perform the actual-user/browser/release audit and documentation reconciliation.
+  - Accepted: six standalone Plotly HTML figures are built from saved evaluation values and published within the integrity-checked final bundle; repeated export matched byte-for-byte across all eight files.
+- [x] TASK-72 Perform the actual-user/browser/release audit and documentation reconciliation.
   - Scope: `README.md`; `PLAN.md`; `tasks/plan.md`; `tasks/todo.md`; `scripts/benchmark.py`; `tests/test_benchmark_script.py`; `src/thermotwin/visualization/dashboard.py`; `tests/test_dashboard.py`. Any defect outside this sequential scope requires a separately whitelisted repair task.
   - Acceptance: clean setup-to-quick-benchmark-to-dashboard instructions work; browser/AppTest inspection covers all required views, responsive/accessibility behavior, console health, source pairing, and hidden-truth separation; CLI errors are actionable and traceback-free; full pytest/Ruff/mypy, deterministic runs, non-overwrite/provenance checks, artifact numbers, architecture, and claims are audited; docs disclose persistence and descriptive synthetic limitations.
   - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests scripts`; all documented smoke/quick commands; dashboard health and browser/AppTest journey; `git diff --check`.
   - Dependencies: TASK-71.
-- [ ] Checkpoint P12C: final release audit accepted.
+  - Accepted: README and plan now document current user commands, artifact paths, quick/full semantics, saved measurements, and limitations. Repairs covered self-contained checkpoint evidence, quick/full decoupling, real forecast CSV/config provenance, strongest detector-event ranking, duplicate YAML key rejection, dataset CLI errors, and final-evaluation export CLI behavior. Release gates passed: 1,459 pytest tests in 385.55 seconds; repository Ruff; strict mypy across 138 source files; final export repeated byte-identically across eight files. Dashboard checks passed 21 focused tests and 10 later repaired-dashboard tests; AppTest exercised 24 combinations without an exception; headless health returned HTTP 200 `ok`. No real browser/DevTools tool was available, so narrow viewport and accessibility-tree behavior were not visually verified; responsive/accessibility risk remains. Generated `results/` files are ignored and not committed. No superiority, statistical-significance, safety-certification, or real-world-generalization claim is made.
+- [x] Checkpoint P12C: final release audit accepted.
   - Acceptance: all Phase 12 jobs are accepted, the actual-user journey and full gates pass, fresh saved outputs support every published number, and no critical defect or unsupported claim remains.
   - Verify: repeat TASK-72 verification from a clean artifact directory and review the final diff/evidence bundle.
   - Dependencies: TASK-72.
+  - Accepted: TASK-61 through TASK-72 passed the scoped integration/release gates. The saved evaluation is quick-mode `workflow_only`, covers the six configured synthetic scenarios, and states large forecast errors and the fault-provenance limitation explicitly. Browser/DevTools visual verification remains unavailable and is disclosed; AppTest and health checks passed. No overall winner is claimed.

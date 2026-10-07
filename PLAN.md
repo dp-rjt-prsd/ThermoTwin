@@ -1137,9 +1137,15 @@ The UI must not contain simulation logic.
 
 # 22. Phase 12 — Benchmark Suite
 
-Sol should orchestrate benchmark scenarios rather than delegating one giant benchmark task.
+Status: implemented and audited at Checkpoint P12C. The deterministic benchmark
+is a descriptive evaluation of six configured synthetic scenarios. The saved
+release evaluation uses quick mode and is labeled `workflow_only`; it does not
+establish model/controller superiority, statistical significance, safety
+certification, or real-world generalization. Full mode requires non-smoke model
+provenance. Quick mode remains workflow-only even when supplied full-trained
+models.
 
-Scenarios should include:
+The accepted scenario configuration covers:
 
 ```text
 Normal operation
@@ -1150,34 +1156,40 @@ Fast charging
 Cell resistance fault
 ```
 
-For each scenario run:
+For every scenario, run all four variants from the same scenario and seed:
 
 ```text
-Threshold controller
-PID controller
-ThermoTwin controller
+Reactive threshold controller + physical simulator
+PID controller + physical simulator
+Predictive controller + data-only thermal twin
+Predictive controller + physics-informed thermal twin
 ```
 
-Record all outputs.
+Record metrics and provenance in a complete, reloadable artifact bundle. During
+forecast rollouts, current exogenous inputs persist into the future; future
+simulator truth and fault labels are not available to the controller.
 
 ---
 
 # 23. Final Evaluation
 
-Primary comparison:
+Final evaluation aggregates saved model, forecast, controller, and fault artifacts
+and exports standalone figures. The saved release figures and descriptive values
+are documented in `README.md`; generated `results/` artifacts are local outputs
+and are not committed. The observed 120-second forecast errors are very large,
+especially OOD. Do not infer an overall winner from individual metrics.
+Repeated independently sampled scenario families and uncertainty analysis remain
+future work beyond Phase 12.
 
-| Metric | Reactive BTMS | ThermoTwin |
-|---|---:|---:|
-| Peak temperature | | |
-| Max temperature spread | | |
-| Cooling energy | | |
-| Safety violations | | |
-| Time above limit | | |
-| Fault detection lead time | | |
+The four variants are compared on peak and mean temperature, maximum temperature
+spread, pump energy, and thermal-violation count and duration. Model evaluation
+reports ID/OOD one-step error and physics residual; forecast evaluation reports
+30/60/120-second error; fault evaluation reports detection time and lead time.
 
-Do not fabricate values.
-
-Generate presentation figures from stored experiment results.
+The fault artifact reports suspected cell and lead time separately from injected
+fault truth. Its detector model is not cryptographically bound to a checkpoint
+because the saved fault artifact lacks checkpoint/configuration hashes and an
+evidence-mode field. This remains a documented limitation.
 
 ---
 

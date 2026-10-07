@@ -2,7 +2,7 @@
 
 ## Overview
 
-This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, model-agnostic multi-step forecast engine, predictive cooling, simulator-owned resistance faults, and artifact-driven dashboard for Phases 0-11. The TASK-60 integration audit and Checkpoint P11 are accepted. Phase 12 is the planned benchmark and final-evaluation program; quantitative superiority has not yet been demonstrated. `AGENTS.md` is authoritative where project documents conflict.
+This plan records the implemented ThermoTwin foundation and accepted Phase 12 benchmark, saved-evidence aggregation, presentation figures, and release audit through Checkpoint P12C. The six-scenario result is descriptive synthetic evidence; the saved release export is quick-mode `workflow_only`, and it does not establish model/controller superiority, statistical significance, safety certification, or real-world generalization. `AGENTS.md` is authoritative where project documents conflict.
 
 ## Frozen Architecture Decisions
 
@@ -228,7 +228,7 @@ Phase 9-11 integration audit evidence (TASK-60): full pytest passed with 1,265 t
 
 ### Phase 12: Benchmark Suite and Final Evaluation
 
-Phase 12 begins with confirmed evidence and user-facing defect repairs. The benchmark must not be used to bury known errors under new aggregation. All tasks are sequential unless the DAG explicitly shows disjoint branches, and every implementation handoff must retain the file whitelist below.
+Phase 12 implements confirmed-evidence repairs, a deterministic six-scenario by four-variant benchmark, saved-evidence aggregation, figures, and a release audit. The result is descriptive synthetic evidence; the saved quick benchmark is workflow-only. Every implementation handoff retains its file whitelist.
 
 - TASK-61: Fix the empty forecast-evaluation split regression before indexing a transition.
   - Likely file scope: `scripts/evaluate_forecasts.py`; `tests/test_forecast_script.py`.
@@ -284,17 +284,22 @@ Phase 12 begins with confirmed evidence and user-facing defect repairs. The benc
   - Acceptance: aggregation reports model ID/OOD MAE, RMSE, maximum cell error, 30/60/120-second rollout error, physics residual, controller peak/mean/spread temperature, pump energy, safety count/duration, and fault detection lead time from saved artifacts only; missing matrix cells or incompatible provenance fail; results describe configured runs and make no CI, significance, generalization, or superiority claim unless measured values support it.
   - Verification: `python -m pytest tests/test_final_evaluation.py`.
   - Dependencies: TASK-69, Checkpoint P12B.
+  - Accepted: aggregation consumes the persisted comparison, ID/OOD forecast, benchmark, and fault evidence and rejects incomplete or inconsistent artifacts. The final export records exact values and provenance without selecting an overall winner. The saved evaluation and bundle manifest were repeated byte-identically across all eight published files. The referenced local example is generated under ignored `results/` and is not committed.
 - TASK-71: Generate presentation figures directly from saved evaluation artifacts.
   - Likely file scope: `src/thermotwin/visualization/benchmark_plots.py`; `tests/test_benchmark_plots.py`.
   - Acceptance: figures cover the four-variant controller matrix, model ID/OOD and horizon errors, physics residuals, scenario thermal/energy tradeoffs, and fault timing; units, scenario/model labels, and quick/full evidence status are visible and accessible; no plotted number is recomputed from hidden inputs.
   - Verification: `python -m pytest tests/test_benchmark_plots.py`.
   - Dependencies: TASK-70.
+  - Accepted: six standalone Plotly HTML figures are generated from the saved final evaluation and included in the integrity-checked export. Repeated export matched byte-for-byte across its eight files.
 - TASK-72: Perform an actual-user, browser, CLI, architecture, and release audit and reconcile documentation.
   - Likely file scope: `README.md`; `PLAN.md`; `tasks/plan.md`; `tasks/todo.md`; `scripts/benchmark.py`; `tests/test_benchmark_script.py`; `src/thermotwin/visualization/dashboard.py`; `tests/test_dashboard.py`. Any newly discovered defect outside this sequential scope requires a separately scoped repair before release.
   - Acceptance: a clean user follows README commands from environment setup through quick benchmark, artifact loading, and dashboard interaction; browser inspection covers the 3x4 measured/predicted heatmaps, horizons, controller/model comparisons, cooling trace, responsive layout, accessibility, console errors, and hidden-truth separation; CLI failures are actionable and traceback-free; dependency direction, type/lint/test gates, deterministic reruns, full-mode provenance rejection, non-overwrite behavior, saved numbers, and claims are audited; docs report only generated evidence and disclose predictive exogenous persistence and synthetic/descriptive limitations.
   - Verification: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests scripts`; all documented smoke/quick commands; headless dashboard health plus browser/AppTest journey; `git diff --check`.
   - Dependencies: TASK-71.
-- Checkpoint P12C: final release is accepted only after the actual-user journey, full quality gates, fresh benchmark artifacts, dashboard/browser review, and evidence-to-claim audit pass. Until then Phase 12 remains incomplete.
+  - Accepted: user instructions now document installation, actual CLI options, non-overwriting output paths, the ID/OOD-to-export artifact chain, figures, dashboard variables/launch, and the authoritative health endpoint. The release audit fixed self-contained checkpoint evidence, quick/full separation, CSV/config provenance, strongest detector-event ranking, duplicate YAML rejection, dataset CLI errors, and final export CLI behavior. Quality gates passed: 1,459 pytest tests in 385.55 seconds, repository Ruff, and strict mypy across 138 source files. Dashboard verification passed 21 focused tests and 10 later repaired-dashboard tests; AppTest exercised 24 combinations without exception, and headless health returned HTTP 200 `ok`. No real browser/DevTools was available, so narrow viewport behavior and the accessibility tree were not visually verified; responsive/accessibility risk remains. Saved values and limitations are documented without a superiority claim.
+- Checkpoint P12C: final release audit accepted.
+  - Acceptance: all Phase 12 jobs are accepted, actual-user instructions match current CLIs, quality gates and available dashboard checks pass, saved outputs support published values, and limitations are explicit.
+  - Accepted: TASK-61 through TASK-72 are accepted. The generated quick-mode release export is workflow-only, covers the configured synthetic cases, and carries no claim of overall superiority, statistical significance, safety certification, or real-world generalization. Browser/DevTools visual verification is unavailable and is disclosed; generated `results/` outputs remain ignored and uncommitted.
 
 ## Risks and Mitigations
 
