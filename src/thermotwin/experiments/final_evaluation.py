@@ -407,11 +407,12 @@ class FinalEvaluation:
             raise ValueError("model provenance must use canonical model order")
         if any(
             item.training_seed != self.comparison_seed
-            or item.training_mode
-            != ("smoke" if self.benchmark_mode == "quick" else "full")
+            or (self.benchmark_mode == "full" and item.training_mode != "full")
             for item in self.model_provenance
         ):
             raise ValueError("model provenance is incompatible with evaluation mode")
+        if len({item.training_mode for item in self.model_provenance}) != 1:
+            raise ValueError("both models must use the same training mode")
         if type(self.model_metrics) is not tuple or len(self.model_metrics) != 4:
             raise ValueError(
                 "model_metrics must contain two models by two distributions"
@@ -533,8 +534,10 @@ def _load_comparison_sources(
     raw_provenance = comparison_provenance
     mode = matrix.mode
     smoke = raw_provenance["smoke_test"]
-    if type(smoke) is not bool or (mode == "quick") != smoke:
-        raise ValueError("comparison evidence mode does not match benchmark mode")
+    if type(smoke) is not bool:
+        raise ValueError("comparison smoke flag must be a boolean")
+    if mode == "full" and smoke:
+        raise ValueError("a full benchmark requires full-trained comparison evidence")
     seed = _positive_or_zero("comparison seed", raw_provenance["seed"])
     dataset_seeds = _exact(
         raw_provenance["dataset_seeds"], set(_DISTRIBUTIONS), "comparison dataset seeds"
@@ -1084,9 +1087,7 @@ def aggregate_final_evaluation(
     smoke = comparison_provenance["smoke_test"]
     if type(smoke) is not bool:
         raise ValueError("comparison smoke flag is invalid")
-    expected_smoke = matrix.mode == "quick"
-    if smoke is not expected_smoke:
-        raise ValueError("comparison and benchmark modes do not match")
+    expected_smoke = smoke
 
     forecast_metrics = (
         *_forecast_metrics_for_distribution(

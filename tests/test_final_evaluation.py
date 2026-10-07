@@ -1,14 +1,25 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 import thermotwin.experiments.final_evaluation as final_evaluation_module
-from test_benchmark_serialization import _save_bundle
+from test_benchmark_serialization import (
+    _execution_with_evidence,
+    save_benchmark_execution,
+)
+from thermotwin.experiments.benchmark_types import (
+    ArtifactReference,
+    BenchmarkMatrix,
+    BenchmarkMode,
+    TrainingMode,
+)
 from thermotwin.experiments.final_evaluation import (
     aggregate_final_evaluation,
     load_final_evaluation,
@@ -49,8 +60,48 @@ def _model_metrics(mae: float) -> dict[str, Any]:
     }
 
 
-def _make_inputs(root: Path) -> tuple[Path, Path, Path, Path, Path]:
-    benchmark = _save_bundle(root, "benchmark")
+def _make_inputs(
+    root: Path,
+    *,
+    benchmark_mode: BenchmarkMode = "quick",
+    training_mode: TrainingMode | None = None,
+    comparison_smoke: bool | None = None,
+) -> tuple[Path, Path, Path, Path, Path]:
+    execution, evidence = _execution_with_evidence(benchmark_mode)
+    selected_training_mode = training_mode or (
+        "smoke" if benchmark_mode == "quick" else "full"
+    )
+    selected_comparison_smoke = (
+        benchmark_mode == "quick" if comparison_smoke is None else comparison_smoke
+    )
+    comparison_provenance_path = "comparison/provenance.json"
+    comparison_provenance = json.loads(evidence[comparison_provenance_path])
+    comparison_provenance["smoke_test"] = selected_comparison_smoke
+    evidence[comparison_provenance_path] = (
+        json.dumps(comparison_provenance, sort_keys=True, indent=2).encode() + b"\n"
+    )
+    comparison_reference = ArtifactReference(
+        comparison_provenance_path,
+        hashlib.sha256(evidence[comparison_provenance_path]).hexdigest(),
+    )
+    cells = []
+    for cell in execution.matrix.cells:
+        model_provenance = cell.model_provenance
+        if model_provenance is not None:
+            model_provenance = replace(
+                model_provenance,
+                training_mode=selected_training_mode,
+                comparison_provenance=comparison_reference,
+            )
+            cell = replace(cell, model_provenance=model_provenance)
+        cells.append(cell)
+    execution = replace(
+        execution,
+        matrix=BenchmarkMatrix(benchmark_mode, tuple(cells)),
+    )
+    benchmark = save_benchmark_execution(
+        execution, root / "benchmark", evidence_files=evidence
+    )
     comparison = root / "comparison-input"
     comparison.mkdir()
     evidence = benchmark / "comparison"
@@ -160,7 +211,7 @@ def _make_inputs(root: Path) -> tuple[Path, Path, Path, Path, Path]:
             "normalization_source": "source/comparison/normalization.json",
             "distribution_label": distribution,
             "split_label": "test",
-            "smoke_test": True,
+            "smoke_test": comparison_provenance["smoke_test"],
         }
         _write_json(forecast / "provenance.json", forecast_provenance)
         for model in _MODELS:
@@ -271,6 +322,54 @@ def test_aggregation_reports_saved_values_and_round_trips_atomically(
     _write_json(saved_path, saved)
     with pytest.raises(ValueError, match="fields mismatch"):
         load_final_evaluation(destination)
+
+
+def test_quick_benchmark_accepts_full_trained_saved_models(tmp_path: Path) -> None:
+    benchmark, comparison, id_forecast, ood_forecast, fault = _make_inputs(
+        tmp_path,
+        benchmark_mode="quick",
+        training_mode="full",
+        comparison_smoke=False,
+    )
+    evaluation = aggregate_final_evaluation(
+        benchmark, comparison, id_forecast, ood_forecast, fault
+    )
+    assert evaluation.benchmark_mode == "quick"
+    assert evaluation.evidence_status == "workflow_only"
+    assert {item.training_mode for item in evaluation.model_provenance} == {"full"}
+
+
+def test_full_benchmark_rejects_smoke_trained_comparison(tmp_path: Path) -> None:
+    benchmark, comparison, id_forecast, ood_forecast, fault = _make_inputs(
+        tmp_path,
+        benchmark_mode="full",
+        training_mode="full",
+        comparison_smoke=True,
+    )
+    with pytest.raises(
+        ValueError,
+        match="full benchmark requires full-trained|training mode does not match",
+    ):
+        aggregate_final_evaluation(
+            benchmark, comparison, id_forecast, ood_forecast, fault
+        )
+
+
+def test_forecast_training_mode_must_match_comparison(tmp_path: Path) -> None:
+    benchmark, comparison, id_forecast, ood_forecast, fault = _make_inputs(
+        tmp_path,
+        benchmark_mode="quick",
+        training_mode="full",
+        comparison_smoke=False,
+    )
+    provenance_path = id_forecast / "provenance.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance["smoke_test"] = True
+    _write_json(provenance_path, provenance)
+    with pytest.raises(ValueError, match="evidence mode"):
+        aggregate_final_evaluation(
+            benchmark, comparison, id_forecast, ood_forecast, fault
+        )
 
 
 def test_missing_forecast_horizon_fails_closed(tmp_path: Path) -> None:
