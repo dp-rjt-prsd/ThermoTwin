@@ -16,6 +16,7 @@ _DASHBOARD_PATH = (
     / "visualization"
     / "dashboard.py"
 )
+_SOURCE_DIRECTORY = _DASHBOARD_PATH.parents[2]
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -65,6 +66,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     environment = os.environ.copy()
     environment["THERMOTWIN_PREDICTIVE_RESULTS"] = str(predictive)
     environment["THERMOTWIN_FAULT_RESULTS"] = str(fault)
+    existing_pythonpath = environment.get("PYTHONPATH")
+    pythonpath_parts = [str(_SOURCE_DIRECTORY)]
+    if existing_pythonpath:
+        pythonpath_parts.append(existing_pythonpath)
+    environment["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
     command = [
         sys.executable,
         "-m",
