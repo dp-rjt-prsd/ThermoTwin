@@ -354,11 +354,12 @@ Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of
   - Verify: focused tests above; `python -m ruff check .`; `python -m mypy src tests scripts`.
   - Dependencies: TASK-66, TASK-67.
   - Accepted: TASK-61 through TASK-67 focused gates passed; the disjoint scenario/controller branches integrated against the frozen contracts with 83 tests. Repository-wide Ruff passed and strict mypy passed across 126 source files; the working tree was clean.
-- [ ] TASK-68 Execute and persist the full 6-by-4 benchmark matrix.
+- [x] TASK-68 Execute and persist the full 6-by-4 benchmark matrix.
   - Scope: `src/thermotwin/experiments/benchmark.py`; `src/thermotwin/experiments/benchmark_serialization.py`; `tests/test_benchmark.py`; `tests/test_benchmark_serialization.py`.
   - Acceptance: all four variants run each identical scenario/seed/state/configuration; non-overwriting artifacts retain traces, metrics, identity, configuration, seed, model/dataset/checkpoint provenance, and completeness state; partial output cannot appear complete.
   - Verify: `python -m pytest tests/test_benchmark.py tests/test_benchmark_serialization.py`.
   - Dependencies: TASK-66, TASK-67, Checkpoint P12A.
+  - Accepted: all 24 cells reuse each scenario object/seed/configuration, convert measured metrics without recomputation drift, and persist through exact-inventory SHA-256-checked sibling staging with atomic publication and strict reload validation. Verification passed with 30 tests, Ruff, and strict mypy, including hash-refreshed semantic tampering and full-mode smoke rejection.
 - [ ] TASK-69 Add quick/full benchmark CLI workflows.
   - Scope: `scripts/benchmark.py`; `tests/test_benchmark_script.py`.
   - Acceptance: quick mode runs the full 6-by-4 matrix and labels it workflow-only; full mode requires validated non-smoke model provenance; malformed/missing paths, empty data, incompatibility, and existing outputs produce concise actionable stderr without traceback.
