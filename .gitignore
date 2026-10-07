@@ -34,9 +34,19 @@ secrets.yml
 # Local design-tool workspace
 .superdesign/
 
+# Editor and operating-system files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
 # Generated datasets, model checkpoints, and experiment results
 data/generated/**
 !data/generated/.gitkeep
+data/processed/**
+!data/processed/.gitkeep
 checkpoints/**
 !checkpoints/.gitkeep
 results/**
