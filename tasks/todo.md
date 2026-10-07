@@ -343,11 +343,12 @@ Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of
   - Verify: `python -m pytest tests/test_benchmark_scenarios.py`.
   - Dependencies: TASK-65.
   - Accepted: strict immutable quick/full cases cover all six scenarios with canonical seed-independent configuration digests and isolated ambient, cooling-capacity, charging, load, and resistance-fault changes. The shared pump coefficient remains `100000.0`. Verification passed with 25 tests, Ruff, and strict mypy.
-- [ ] TASK-67 Implement the four-variant controller factory and leakage regression.
+- [x] TASK-67 Implement the four-variant controller factory and leakage regression.
   - Scope: `src/thermotwin/experiments/benchmark_controllers.py`; `tests/test_benchmark_controllers.py`.
   - Acceptance: threshold primary, PID supplemental, predictive/data-only, and predictive/physics-informed variants receive identical public state/scenario inputs; predictive variants use disclosed persistence through the forecaster and receive no future truth or fault label.
   - Verify: `python -m pytest tests/test_benchmark_controllers.py`.
   - Dependencies: TASK-65.
+  - Accepted: the immutable factory returns fresh threshold, PID, data-only predictive, and physics-informed predictive controllers with scenario-derived limits and explicit no-future-truth persistence assumptions. Leakage/bounds/freshness validation passed with 26 tests, Ruff, and strict mypy.
 - [ ] Checkpoint P12A: stabilization and benchmark contracts accepted before suite execution.
   - Acceptance: TASK-61 through TASK-67 focused tests, Ruff, strict mypy, and diff review pass; the two disjoint TASK-66/TASK-67 scopes are integrated without contract drift.
   - Verify: focused tests above; `python -m ruff check .`; `python -m mypy src tests scripts`.
