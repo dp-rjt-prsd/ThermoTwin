@@ -135,6 +135,16 @@ def _canonical_digest(value: object) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _artifact_json_bytes(value: object) -> bytes:
+    return (json.dumps(value, allow_nan=False, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
+
+
+def _bytes_digest(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
 def _file_digest(path: Path) -> str:
     digest = hashlib.sha256()
     try:
@@ -202,7 +212,11 @@ def _validate_comparison(
     require_full_training: bool,
     minimum_flow_kg_s: float,
     maximum_flow_kg_s: float,
-) -> tuple[dict[ModelVariant, Any], dict[ModelVariant, ModelProvenance]]:
+) -> tuple[
+    dict[ModelVariant, Any],
+    dict[ModelVariant, ModelProvenance],
+    dict[str, bytes],
+]:
     if not directory.is_dir() or directory.is_symlink():
         raise ValueError(f"comparison directory is missing or invalid: {directory}")
     root = directory.resolve()
@@ -309,19 +323,32 @@ def _validate_comparison(
         stable_provenance["datasets"][label]["manifest_path"] = (
             f"dataset/{label}/manifest.json"
         )
-    provenance_digest = _canonical_digest(stable_provenance)
+    evidence_files = {
+        f"comparison/{name}": path.read_bytes() for name, path in paths.items()
+        if name != "provenance.json"
+    }
+    evidence_files["comparison/provenance.json"] = _artifact_json_bytes(
+        stable_provenance
+    )
+    for label in ("in_distribution", "out_of_distribution"):
+        evidence_files[f"dataset/{label}/manifest.json"] = _artifact_json_bytes(
+            manifests[label]
+        )
     model_config_reference = ArtifactReference(
         "comparison/model_config.json", _file_digest(paths["model_config.json"])
     )
     normalization_reference = ArtifactReference(
-        "comparison/normalization.json", _file_digest(paths["normalization.json"])
+        "comparison/normalization.json",
+        _bytes_digest(evidence_files["comparison/normalization.json"]),
     )
     comparison_reference = ArtifactReference(
-        "comparison/provenance.json", provenance_digest
+        "comparison/provenance.json",
+        _bytes_digest(evidence_files["comparison/provenance.json"]),
     )
     manifest_references = tuple(
         ArtifactReference(
-            f"dataset/{label}/manifest.json", _canonical_digest(manifests[label])
+            f"dataset/{label}/manifest.json",
+            _bytes_digest(evidence_files[f"dataset/{label}/manifest.json"]),
         )
         for label in ("in_distribution", "out_of_distribution")
     )
@@ -342,14 +369,15 @@ def _validate_comparison(
             training_mode=training_mode,
             training_seed=seed,
             checkpoint=ArtifactReference(
-                f"comparison/{variant}.pt", _file_digest(paths[f"{variant}.pt"])
+                f"comparison/{variant}.pt",
+                _bytes_digest(evidence_files[f"comparison/{variant}.pt"]),
             ),
             model_config=model_config_reference,
             normalization=normalization_reference,
             comparison_provenance=comparison_reference,
             dataset_manifests=manifest_references,
         )
-    return forecasters, model_provenance
+    return forecasters, model_provenance, evidence_files
 
 
 def _load_controller_parameters() -> tuple[BenchmarkControllerParameters, float, float]:
@@ -576,7 +604,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.comparison_directory is None:
                 _train_temporary_comparison(comparison)
             parameters, minimum_flow, maximum_flow = _load_controller_parameters()
-            forecasters, provenance = _validate_comparison(
+            forecasters, provenance, evidence_files = _validate_comparison(
                 comparison,
                 require_full_training=mode == "full",
                 minimum_flow_kg_s=minimum_flow,
@@ -596,7 +624,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 provenance,
                 mode=cast(Any, mode),
             )
-            saved = save_benchmark_execution(execution, output)
+            saved = save_benchmark_execution(
+                execution, output, evidence_files=evidence_files
+            )
         finally:
             if temporary is not None:
                 temporary.cleanup()

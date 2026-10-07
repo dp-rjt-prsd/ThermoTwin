@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
+import numpy as np
 import pytest
+import torch
 
+from thermotwin.data.model_dataset import feature_names, target_names
 from thermotwin.experiments.benchmark import BenchmarkExecution
 from thermotwin.experiments.benchmark_serialization import (
     load_benchmark_matrix,
@@ -15,8 +20,12 @@ from thermotwin.experiments.benchmark_serialization import (
 from thermotwin.experiments.benchmark_types import (
     SCENARIO_IDS,
     VARIANT_IDS,
+    ArtifactReference,
+    BenchmarkMatrix,
     BenchmarkMode,
 )
+from thermotwin.models.config import MLPConfig
+from thermotwin.models.mlp import ThermalMLP
 
 
 def _execution(mode: BenchmarkMode = "quick") -> BenchmarkExecution:
@@ -25,10 +34,143 @@ def _execution(mode: BenchmarkMode = "quick") -> BenchmarkExecution:
     return _execute(mode)
 
 
+def _evidence(mode: BenchmarkMode) -> dict[str, bytes]:
+    model_config = MLPConfig(17, 12, (8,))
+    model_config_bytes = json.dumps(
+        {
+            "input_dim": 17,
+            "output_dim": 12,
+            "hidden_widths": [8],
+            "activation": "gelu",
+        },
+        sort_keys=True,
+        indent=2,
+    ).encode() + b"\n"
+    model = ThermalMLP(model_config)
+    checkpoint_stream = io.BytesIO()
+    torch.save(model.state_dict(), checkpoint_stream)
+    checkpoint = checkpoint_stream.getvalue()
+    normalization = {
+        "schema_version": 1,
+        "feature_names": feature_names(12),
+        "target_names": target_names(12),
+        "feature_mean": np.zeros(17).tolist(),
+        "feature_scale": np.ones(17).tolist(),
+        "target_mean": np.zeros(12).tolist(),
+        "target_scale": np.ones(12).tolist(),
+    }
+    normalization_bytes = json.dumps(
+        normalization, sort_keys=True, indent=2
+    ).encode() + b"\n"
+
+    def dataset_manifest(seed: int) -> dict[str, object]:
+        return {
+            "schema_version": "1.0",
+            "seed": seed,
+            "validation_fraction": 0.2,
+            "test_fraction": 0.2,
+            "cell_count": 12,
+            "columns": [f"column_{index}" for index in range(25)],
+            "splits": {
+                split: {
+                    "row_count": 4,
+                    "trajectory_count": 1,
+                    "trajectory_ids": [f"{split}-trajectory"],
+                }
+                for split in ("train", "validation", "test")
+            },
+        }
+
+    manifests = {
+        "in_distribution": dataset_manifest(17),
+        "out_of_distribution": dataset_manifest(18),
+    }
+    comparison = {
+        "artifact_schema_version": "1.0",
+        "datasets": {
+            label: {
+                "directory": f"dataset/{label}",
+                "manifest_path": f"dataset/{label}/manifest.json",
+                "manifest": manifest,
+                "distribution": label,
+                **(
+                    {"normalization_source": "in_distribution"}
+                    if label == "out_of_distribution"
+                    else {}
+                ),
+            }
+            for label, manifest in manifests.items()
+        },
+        "seed": 17,
+        "dataset_seeds": {"in_distribution": 17, "out_of_distribution": 18},
+        "package_versions": {"torch": torch.__version__},
+        "config_source": "configs/training.yaml",
+        "configuration_source_path": "configs/training.yaml",
+        "normalization": {
+            "artifact": "normalization.json",
+            "fit_dataset": "in_distribution",
+            "reused_for": ["in_distribution", "out_of_distribution"],
+        },
+        "distribution_labels": ["in_distribution", "out_of_distribution"],
+        "smoke_test": mode == "quick",
+    }
+    encode = lambda value: (  # noqa: E731
+        json.dumps(value, sort_keys=True, indent=2).encode() + b"\n"
+    )
+    return {
+        "comparison/data_only.pt": checkpoint,
+        "comparison/physics_informed.pt": checkpoint,
+        "comparison/model_config.json": model_config_bytes,
+        "comparison/normalization.json": normalization_bytes,
+        "comparison/provenance.json": encode(comparison),
+        "dataset/in_distribution/manifest.json": encode(manifests["in_distribution"]),
+        "dataset/out_of_distribution/manifest.json": encode(
+            manifests["out_of_distribution"]
+        ),
+    }
+
+
+def _execution_with_evidence(
+    mode: BenchmarkMode = "quick",
+) -> tuple[BenchmarkExecution, dict[str, bytes]]:
+    execution = _execution(mode)
+    evidence = _evidence(mode)
+    cells = []
+    for cell in execution.matrix.cells:
+        provenance = cell.model_provenance
+        if provenance is not None:
+            paths = (
+                f"comparison/{provenance.model_variant}.pt",
+                "comparison/model_config.json",
+                "comparison/normalization.json",
+                "comparison/provenance.json",
+                "dataset/in_distribution/manifest.json",
+                "dataset/out_of_distribution/manifest.json",
+            )
+            references = tuple(
+                ArtifactReference(path, hashlib.sha256(evidence[path]).hexdigest())
+                for path in paths
+            )
+            provenance = replace(
+                provenance,
+                checkpoint=references[0],
+                model_config=references[1],
+                normalization=references[2],
+                comparison_provenance=references[3],
+                dataset_manifests=references[4:],
+            )
+            cell = replace(cell, model_provenance=provenance)
+        cells.append(cell)
+    return replace(execution, matrix=BenchmarkMatrix(mode, tuple(cells))), evidence
+
+
 def _save_bundle(
     tmp_path: Path, name: str, *, mode: BenchmarkMode = "quick"
 ) -> Path:
-    return save_benchmark_execution(_execution(mode), tmp_path / name)
+    execution, evidence = _execution_with_evidence(mode)
+    return save_benchmark_execution(
+        execution, tmp_path / name, evidence_files=evidence
+    )
 
 
 def _read_manifest(bundle: Path) -> dict[str, object]:
@@ -60,7 +202,21 @@ def _refresh_artifact_hash(
 
 
 def _expected_files() -> set[str]:
-    files = {"manifest.json", "runs"}
+    files = {
+        "manifest.json",
+        "runs",
+        "comparison",
+        "dataset",
+        "comparison/data_only.pt",
+        "comparison/physics_informed.pt",
+        "comparison/model_config.json",
+        "comparison/normalization.json",
+        "comparison/provenance.json",
+        "dataset/in_distribution",
+        "dataset/in_distribution/manifest.json",
+        "dataset/out_of_distribution",
+        "dataset/out_of_distribution/manifest.json",
+    }
     for scenario in SCENARIO_IDS:
         files.add(f"runs/{scenario}")
         for variant in VARIANT_IDS:
@@ -84,8 +240,10 @@ def _inventory(root: Path) -> set[str]:
 
 
 def test_saves_and_reloads_complete_matrix_with_exact_inventory(tmp_path: Path) -> None:
-    execution = _execution()
-    destination = save_benchmark_execution(execution, tmp_path / "bundle")
+    execution, evidence = _execution_with_evidence()
+    destination = save_benchmark_execution(
+        execution, tmp_path / "bundle", evidence_files=evidence
+    )
     assert destination == tmp_path / "bundle"
     assert _inventory(destination) == _expected_files()
     reloaded = load_benchmark_matrix(destination)
@@ -95,13 +253,63 @@ def test_saves_and_reloads_complete_matrix_with_exact_inventory(tmp_path: Path) 
     assert len(manifest["cells"]) == 24
 
 
+def test_loader_rejects_missing_extra_or_tampered_evidence(tmp_path: Path) -> None:
+    original = _save_bundle(tmp_path, "evidence-original")
+    missing = tmp_path / "evidence-missing"
+    shutil.copytree(original, missing)
+    (missing / "comparison/data_only.pt").unlink()
+    with pytest.raises(ValueError, match="missing or unexpected"):
+        load_benchmark_matrix(missing)
+
+    extra = tmp_path / "evidence-extra"
+    shutil.copytree(original, extra)
+    (extra / "comparison/unexpected.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="missing or unexpected"):
+        load_benchmark_matrix(extra)
+
+    tampered = tmp_path / "evidence-tampered"
+    shutil.copytree(original, tampered)
+    with (tampered / "comparison/normalization.json").open("ab") as stream:
+        stream.write(b" ")
+    with pytest.raises(ValueError, match="evidence artifact digest mismatch"):
+        load_benchmark_matrix(tampered)
+
+
+def test_loader_rejects_semantically_incompatible_evidence_after_hash_update(
+    tmp_path: Path,
+) -> None:
+    bundle = _save_bundle(tmp_path, "evidence-incompatible")
+    manifest = _read_manifest(bundle)
+    evidence = manifest["evidence"]
+    assert isinstance(evidence, dict)
+    config_path = bundle / "comparison/model_config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["input_dim"] = 16
+    config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    digest = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    evidence["comparison/model_config.json"] = digest
+    cells = manifest["cells"]
+    assert isinstance(cells, list)
+    for cell in cells:
+        assert isinstance(cell, dict)
+        provenance = cell["model_provenance"]
+        if isinstance(provenance, dict):
+            reference = provenance["model_config"]
+            assert isinstance(reference, dict)
+            reference["sha256"] = digest
+    _write_manifest(bundle, manifest)
+    with pytest.raises(ValueError, match="incompatible with 12 cells"):
+        load_benchmark_matrix(bundle)
+
+
 def test_save_never_overwrites_an_existing_destination(tmp_path: Path) -> None:
     destination = tmp_path / "existing"
     destination.mkdir()
     marker = destination / "keep.txt"
     marker.write_text("keep", encoding="utf-8")
     with pytest.raises(FileExistsError):
-        save_benchmark_execution(_execution(), destination)
+        execution, evidence = _execution_with_evidence()
+        save_benchmark_execution(execution, destination, evidence_files=evidence)
     assert marker.read_text(encoding="utf-8") == "keep"
 
 
@@ -163,8 +371,11 @@ def test_handled_save_failure_cleans_only_its_stage(
     monkeypatch.setattr(serialization, "save_experiment_result", fail)
     unrelated_stage = tmp_path / ".failed.partial-keep"
     unrelated_stage.mkdir()
+    execution, evidence = _execution_with_evidence()
     with pytest.raises(OSError, match="injected"):
-        save_benchmark_execution(_execution(), tmp_path / "failed")
+        save_benchmark_execution(
+            execution, tmp_path / "failed", evidence_files=evidence
+        )
     assert not (tmp_path / "failed").exists()
     assert list(tmp_path.glob(".failed.partial-*")) == [unrelated_stage]
 
@@ -247,6 +458,24 @@ def test_loader_rejects_model_provenance_variant_mismatch(tmp_path: Path) -> Non
     provenance["model_variant"] = "physics_informed"
     _write_manifest(bundle, manifest)
     with pytest.raises(ValueError, match="model_provenance.model_variant"):
+        load_benchmark_matrix(bundle)
+
+
+@pytest.mark.parametrize("path", ["../outside.pt", "C:/outside.pt", "comparison\\x.pt"])
+def test_loader_rejects_noncanonical_evidence_references(
+    tmp_path: Path, path: str
+) -> None:
+    bundle = _save_bundle(tmp_path, "bundle-evidence-path")
+    manifest = _read_manifest(bundle)
+    cells = manifest["cells"]
+    assert isinstance(cells, list) and isinstance(cells[2], dict)
+    provenance = cells[2]["model_provenance"]
+    assert isinstance(provenance, dict)
+    checkpoint = provenance["checkpoint"]
+    assert isinstance(checkpoint, dict)
+    checkpoint["path"] = path
+    _write_manifest(bundle, manifest)
+    with pytest.raises(ValueError, match="canonical bundle paths"):
         load_benchmark_matrix(bundle)
 
 

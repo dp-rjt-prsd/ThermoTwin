@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -244,6 +245,22 @@ def test_quick_matrix_is_reloadable_and_reproducible_with_supplied_models(
             assert (first_output / relative).read_bytes() == (
                 second_output / relative
             ).read_bytes()
+    for cell in load_benchmark_matrix(first_output).cells:
+        if cell.model_provenance is not None:
+            for reference in (
+                cell.model_provenance.checkpoint,
+                cell.model_provenance.model_config,
+                cell.model_provenance.normalization,
+                cell.model_provenance.comparison_provenance,
+                *cell.model_provenance.dataset_manifests,
+            ):
+                artifact = first_output / reference.path
+                assert artifact.is_file()
+                assert hashlib.sha256(artifact.read_bytes()).hexdigest() == (
+                    reference.sha256
+                )
+    comparison.rename(tmp_path / "comparison-removed")
+    assert len(load_benchmark_matrix(first_output).cells) == 24
 
 
 def test_quick_without_comparison_trains_in_temporary_directory(
@@ -263,6 +280,18 @@ def test_quick_without_comparison_trains_in_temporary_directory(
             assert cell.model_provenance.comparison_provenance.path == (
                 "comparison/provenance.json"
             )
+            for reference in (
+                cell.model_provenance.checkpoint,
+                cell.model_provenance.model_config,
+                cell.model_provenance.normalization,
+                cell.model_provenance.comparison_provenance,
+                *cell.model_provenance.dataset_manifests,
+            ):
+                artifact = output / reference.path
+                assert artifact.is_file()
+                assert hashlib.sha256(artifact.read_bytes()).hexdigest() == (
+                    reference.sha256
+                )
 
 
 def test_full_mode_rejects_smoke_provenance_before_execution(tmp_path: Path) -> None:

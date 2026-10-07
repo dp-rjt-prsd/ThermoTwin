@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import pickle
 import re
 import shutil
 import uuid
@@ -14,6 +15,11 @@ from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, cast
 
+import numpy as np
+import torch
+
+from thermotwin.data.model_dataset import feature_names, target_names
+from thermotwin.data.preprocessing import NormalizationStats
 from thermotwin.experiments.benchmark_types import (
     SCENARIO_IDS,
     VARIANT_IDS,
@@ -28,13 +34,15 @@ from thermotwin.experiments.benchmark_types import (
     TrainingMode,
 )
 from thermotwin.experiments.serialization import save_experiment_result
+from thermotwin.models.config import MLPConfig
+from thermotwin.models.mlp import ThermalMLP
 
 if TYPE_CHECKING:
     import os as os_types
 
     from thermotwin.experiments.benchmark import BenchmarkExecution
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _METRIC_FIELDS = {
     "peak_temperature_k",
@@ -81,6 +89,15 @@ _CELL_FIELDS = {
     "artifact_sha256",
 }
 _ARTIFACTS = ("timeseries", "metrics", "provenance")
+_EVIDENCE_PATHS = (
+    "comparison/data_only.pt",
+    "comparison/physics_informed.pt",
+    "comparison/model_config.json",
+    "comparison/normalization.json",
+    "comparison/provenance.json",
+    "dataset/in_distribution/manifest.json",
+    "dataset/out_of_distribution/manifest.json",
+)
 
 
 def _json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -164,15 +181,74 @@ def _manifest_cell(
     }
 
 
+def _canonical_evidence_paths(provenance: ModelProvenance) -> tuple[str, ...]:
+    expected = (
+        f"comparison/{provenance.model_variant}.pt",
+        "comparison/model_config.json",
+        "comparison/normalization.json",
+        "comparison/provenance.json",
+        "dataset/in_distribution/manifest.json",
+        "dataset/out_of_distribution/manifest.json",
+    )
+    actual = (
+        provenance.checkpoint.path,
+        provenance.model_config.path,
+        provenance.normalization.path,
+        provenance.comparison_provenance.path,
+        *(reference.path for reference in provenance.dataset_manifests),
+    )
+    if actual != expected:
+        raise ValueError("model provenance references are not canonical bundle paths")
+    return expected
+
+
+def _validate_evidence_payloads(
+    matrix: BenchmarkMatrix, evidence_files: Mapping[str, bytes]
+) -> dict[str, str]:
+    if set(evidence_files) != set(_EVIDENCE_PATHS):
+        raise ValueError("evidence artifacts must contain the exact required paths")
+    if any(type(payload) is not bytes for payload in evidence_files.values()):
+        raise ValueError("evidence artifact payloads must be bytes")
+    hashes = {
+        path: hashlib.sha256(evidence_files[path]).hexdigest()
+        for path in _EVIDENCE_PATHS
+    }
+    seen_variants: set[str] = set()
+    for cell in matrix.cells:
+        provenance = cell.model_provenance
+        if provenance is None:
+            continue
+        paths = _canonical_evidence_paths(provenance)
+        references = (
+            provenance.checkpoint,
+            provenance.model_config,
+            provenance.normalization,
+            provenance.comparison_provenance,
+            *provenance.dataset_manifests,
+        )
+        if any(
+            reference.sha256 != hashes[path]
+            for reference, path in zip(references, paths, strict=True)
+        ):
+            raise ValueError("model provenance digest does not match evidence bytes")
+        seen_variants.add(provenance.model_variant)
+    if seen_variants != {"data_only", "physics_informed"}:
+        raise ValueError("benchmark evidence must cover both model variants")
+    return hashes
+
+
 def save_benchmark_execution(
     execution: BenchmarkExecution,
     output_directory: str | os_types.PathLike[str],
+    *,
+    evidence_files: Mapping[str, bytes],
 ) -> Path:
     """Atomically publish a new complete benchmark bundle without overwrite."""
     from thermotwin.experiments.benchmark import BenchmarkExecution
 
     if type(execution) is not BenchmarkExecution:
         raise TypeError("execution must be exactly a BenchmarkExecution")
+    evidence_hashes = _validate_evidence_payloads(execution.matrix, evidence_files)
     try:
         requested = Path(output_directory)
     except (TypeError, ValueError) as error:
@@ -192,6 +268,10 @@ def save_benchmark_execution(
     stage = parent / f".{requested.name}.partial-{uuid.uuid4().hex}"
     stage.mkdir(exist_ok=False)
     try:
+        for relative_path in _EVIDENCE_PATHS:
+            evidence_path = stage / PurePosixPath(relative_path)
+            evidence_path.parent.mkdir(parents=True, exist_ok=True)
+            evidence_path.write_bytes(evidence_files[relative_path])
         cells_by_key = {
             (cell.scenario_id, cell.variant_id): cell for cell in execution.matrix.cells
         }
@@ -218,6 +298,7 @@ def save_benchmark_execution(
             "schema_version": _SCHEMA_VERSION,
             "complete": True,
             "mode": execution.matrix.mode,
+            "evidence": evidence_hashes,
             "cells": manifest_cells,
         }
         (stage / "manifest.json").write_text(
@@ -442,7 +523,14 @@ def _parse_fault(value: object) -> FaultDetectionOutcome | None:
 
 
 def _expected_inventory() -> set[str]:
-    inventory = {"manifest.json", "runs"}
+    inventory = {"manifest.json", "runs", "comparison", "dataset"}
+    inventory.update(_EVIDENCE_PATHS)
+    inventory.update(
+        {
+            "dataset/in_distribution",
+            "dataset/out_of_distribution",
+        }
+    )
     for scenario_id in SCENARIO_IDS:
         scenario_path = f"runs/{scenario_id}"
         inventory.add(scenario_path)
@@ -611,6 +699,299 @@ def _validate_run_files(
         raise ValueError("reactive matrix cell cannot have model provenance")
 
 
+def _validate_dataset_manifest(value: object, label: str) -> dict[str, object]:
+    manifest = _exact_fields(
+        value,
+        {
+            "schema_version",
+            "seed",
+            "validation_fraction",
+            "test_fraction",
+            "cell_count",
+            "columns",
+            "splits",
+        },
+        f"{label} dataset manifest",
+    )
+    if manifest["schema_version"] != "1.0" or manifest["cell_count"] != 12:
+        raise ValueError(f"{label} dataset manifest is incompatible")
+    if isinstance(manifest["seed"], bool) or not isinstance(manifest["seed"], int):
+        raise ValueError(f"{label} dataset manifest seed is invalid")
+    validation_fraction = _finite_number(
+        manifest["validation_fraction"], f"{label} validation fraction"
+    )
+    test_fraction = _finite_number(manifest["test_fraction"], f"{label} test fraction")
+    if (
+        validation_fraction < 0.0
+        or test_fraction < 0.0
+        or validation_fraction + test_fraction >= 1.0
+    ):
+        raise ValueError(f"{label} dataset split fractions are invalid")
+    columns = manifest["columns"]
+    if (
+        not isinstance(columns, list)
+        or len(columns) < 13
+        or any(type(column) is not str for column in columns)
+    ):
+        raise ValueError(f"{label} dataset manifest columns are invalid")
+    splits = _exact_fields(
+        manifest["splits"], {"train", "validation", "test"}, f"{label} splits"
+    )
+    for split_name, split_value in splits.items():
+        split = _exact_fields(
+            split_value,
+            {"row_count", "trajectory_count", "trajectory_ids"},
+            f"{label} {split_name} split",
+        )
+        row_count, trajectory_count = split["row_count"], split["trajectory_count"]
+        ids = split["trajectory_ids"]
+        if (
+            isinstance(row_count, bool)
+            or not isinstance(row_count, int)
+            or row_count < 1
+            or isinstance(trajectory_count, bool)
+            or not isinstance(trajectory_count, int)
+            or trajectory_count < 1
+            or not isinstance(ids, list)
+            or len(ids) != trajectory_count
+            or any(type(item) is not str or not item for item in ids)
+            or len(set(ids)) != len(ids)
+        ):
+            raise ValueError(f"{label} {split_name} split is invalid")
+    return manifest
+
+
+def _validate_embedded_evidence(
+    root: Path,
+    evidence: dict[str, object],
+    provenances: tuple[ModelProvenance, ...],
+) -> None:
+    if set(evidence) != set(_EVIDENCE_PATHS):
+        raise ValueError("benchmark evidence inventory is incomplete or unexpected")
+    evidence_bytes: dict[str, bytes] = {}
+    for path in _EVIDENCE_PATHS:
+        pure = PurePosixPath(path)
+        digest = evidence[path]
+        if (
+            pure.is_absolute()
+            or ".." in pure.parts
+            or "\\" in path
+            or pure.as_posix() != path
+            or not isinstance(digest, str)
+            or _DIGEST_RE.fullmatch(digest) is None
+        ):
+            raise ValueError("benchmark evidence paths or digests are invalid")
+        artifact = root.joinpath(*pure.parts)
+        if not artifact.is_file() or artifact.is_symlink():
+            raise ValueError(f"missing evidence artifact: {path}")
+        if _sha256(artifact) != digest:
+            raise ValueError(f"evidence artifact digest mismatch: {path}")
+        evidence_bytes[path] = artifact.read_bytes()
+
+    if len(provenances) == 0:
+        raise ValueError("benchmark evidence has no predictive model provenance")
+    provenance_by_variant: dict[str, ModelProvenance] = {}
+    for provenance in provenances:
+        previous = provenance_by_variant.setdefault(
+            provenance.model_variant, provenance
+        )
+        if previous != provenance:
+            raise ValueError("model provenance differs across benchmark scenarios")
+        paths = _canonical_evidence_paths(provenance)
+        references = (
+            provenance.checkpoint,
+            provenance.model_config,
+            provenance.normalization,
+            provenance.comparison_provenance,
+            *provenance.dataset_manifests,
+        )
+        if any(
+            hashlib.sha256(evidence_bytes[path]).hexdigest() != reference.sha256
+            for reference, path in zip(references, paths, strict=True)
+        ):
+            raise ValueError("model provenance digest does not match bundle evidence")
+
+    config = _exact_fields(
+        _read_json(root / "comparison/model_config.json"),
+        {"input_dim", "output_dim", "hidden_widths", "activation"},
+        "embedded model configuration",
+    )
+    try:
+        model_config = MLPConfig(
+            input_dim=config["input_dim"],  # type: ignore[arg-type]
+            output_dim=config["output_dim"],  # type: ignore[arg-type]
+            hidden_widths=tuple(config["hidden_widths"]),  # type: ignore[arg-type]
+            activation=config["activation"],  # type: ignore[arg-type]
+        )
+    except (TypeError, ValueError) as error:
+        raise ValueError("embedded model configuration is invalid") from error
+    if model_config.input_dim != 17 or model_config.output_dim != 12:
+        raise ValueError("embedded model configuration is incompatible with 12 cells")
+
+    normalization = _exact_fields(
+        _read_json(root / "comparison/normalization.json"),
+        {
+            "schema_version",
+            "feature_names",
+            "target_names",
+            "feature_mean",
+            "feature_scale",
+            "target_mean",
+            "target_scale",
+        },
+        "embedded normalization",
+    )
+    if type(normalization["schema_version"]) is not int or normalization[
+        "schema_version"
+    ] != 1:
+        raise ValueError("embedded normalization schema is unsupported")
+    try:
+        stats = NormalizationStats(
+            feature_names=tuple(normalization["feature_names"]),  # type: ignore[arg-type]
+            target_names=tuple(normalization["target_names"]),  # type: ignore[arg-type]
+            feature_mean=np.asarray(normalization["feature_mean"], dtype=np.float64),
+            feature_scale=np.asarray(normalization["feature_scale"], dtype=np.float64),
+            target_mean=np.asarray(normalization["target_mean"], dtype=np.float64),
+            target_scale=np.asarray(normalization["target_scale"], dtype=np.float64),
+        )
+    except (TypeError, ValueError) as error:
+        raise ValueError("embedded normalization is invalid") from error
+    if (
+        stats.feature_names != feature_names(12)
+        or stats.target_names != target_names(12)
+        or len(stats.feature_mean) != model_config.input_dim
+        or len(stats.target_mean) != model_config.output_dim
+    ):
+        raise ValueError("embedded normalization is incompatible with model schema")
+
+    for variant in ("data_only", "physics_informed"):
+        checkpoint_path = root / f"comparison/{variant}.pt"
+        try:
+            state = torch.load(
+                checkpoint_path, map_location="cpu", weights_only=True
+            )
+            if (
+                not isinstance(state, dict)
+                or not state
+                or any(
+                    not isinstance(key, str) or not isinstance(value, torch.Tensor)
+                    for key, value in state.items()
+                )
+            ):
+                raise ValueError("checkpoint is not a tensor-only state_dict")
+            ThermalMLP(model_config).load_state_dict(state, strict=True)
+        except (
+            EOFError,
+            OSError,
+            pickle.UnpicklingError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as error:
+            raise ValueError(
+                f"embedded {variant} checkpoint is incompatible"
+            ) from error
+
+    manifests: dict[str, dict[str, object]] = {}
+    for label in ("in_distribution", "out_of_distribution"):
+        path = f"dataset/{label}/manifest.json"
+        manifests[label] = _validate_dataset_manifest(
+            _read_json(root / path), label
+        )
+    comparison = _exact_fields(
+        _read_json(root / "comparison/provenance.json"),
+        {
+            "artifact_schema_version",
+            "datasets",
+            "seed",
+            "dataset_seeds",
+            "package_versions",
+            "config_source",
+            "configuration_source_path",
+            "normalization",
+            "distribution_labels",
+            "smoke_test",
+        },
+        "embedded comparison provenance",
+    )
+    datasets = _exact_fields(
+        comparison["datasets"],
+        {"in_distribution", "out_of_distribution"},
+        "embedded comparison datasets",
+    )
+    dataset_seeds = _exact_fields(
+        comparison["dataset_seeds"],
+        {"in_distribution", "out_of_distribution"},
+        "embedded dataset seeds",
+    )
+    for label, manifest in manifests.items():
+        expected_fields = {
+            "directory",
+            "manifest_path",
+            "manifest",
+            "distribution",
+        } | ({"normalization_source"} if label == "out_of_distribution" else set())
+        dataset = _exact_fields(
+            datasets[label], expected_fields, f"embedded {label} dataset"
+        )
+        if dataset["manifest"] != manifest:
+            raise ValueError("embedded dataset provenance does not match manifest")
+        if dataset["directory"] != f"dataset/{label}" or dataset[
+            "manifest_path"
+        ] != f"dataset/{label}/manifest.json":
+            raise ValueError("embedded dataset paths are not normalized")
+        expected_dataset_seed = dataset_seeds[label]
+        if (
+            isinstance(expected_dataset_seed, bool)
+            or not isinstance(expected_dataset_seed, int)
+            or expected_dataset_seed < 0
+        ):
+            raise ValueError("embedded dataset seed is invalid")
+        if manifest["seed"] != expected_dataset_seed:
+            raise ValueError("embedded dataset manifest seed is inconsistent")
+        if dataset["distribution"] != label:
+            raise ValueError("embedded dataset distribution is inconsistent")
+        if label == "out_of_distribution" and dataset[
+            "normalization_source"
+        ] != "in_distribution":
+            raise ValueError("embedded OOD normalization source is inconsistent")
+    package_versions = cast(dict[object, object], comparison["package_versions"])
+    if (
+        comparison["artifact_schema_version"] != "1.0"
+        or isinstance(comparison["seed"], bool)
+        or not isinstance(comparison["seed"], int)
+        or comparison["seed"] < 0
+        or comparison["distribution_labels"]
+        != ["in_distribution", "out_of_distribution"]
+        or type(comparison["smoke_test"]) is not bool
+        or not isinstance(comparison["package_versions"], dict)
+        or not comparison["package_versions"]
+        or any(
+            type(name) is not str
+            or not name
+            or type(version) is not str
+            or not version
+            for name, version in package_versions.items()
+        )
+        or type(comparison["config_source"]) is not str
+        or not comparison["config_source"]
+        or type(comparison["configuration_source_path"]) is not str
+        or not comparison["configuration_source_path"]
+        or comparison["normalization"]
+        != {
+            "artifact": "normalization.json",
+            "fit_dataset": "in_distribution",
+            "reused_for": ["in_distribution", "out_of_distribution"],
+        }
+    ):
+        raise ValueError("embedded comparison provenance is incompatible")
+    training_mode = "smoke" if comparison["smoke_test"] else "full"
+    if any(item.training_mode != training_mode for item in provenances):
+        raise ValueError("model training mode does not match comparison provenance")
+    if any(item.training_seed != comparison["seed"] for item in provenances):
+        raise ValueError("model training seed does not match comparison provenance")
+
+
 def load_benchmark_matrix(directory: str | os_types.PathLike[str]) -> BenchmarkMatrix:
     """Load and validate the exact portable artifact set without executing it."""
     root = Path(directory)
@@ -623,7 +1004,7 @@ def load_benchmark_matrix(directory: str | os_types.PathLike[str]) -> BenchmarkM
 
     manifest = _exact_fields(
         _read_json(root / "manifest.json"),
-        {"schema_version", "complete", "mode", "cells"},
+        {"schema_version", "complete", "mode", "evidence", "cells"},
         "benchmark manifest",
     )
     if (
@@ -637,8 +1018,12 @@ def load_benchmark_matrix(directory: str | os_types.PathLike[str]) -> BenchmarkM
     raw_cells = manifest["cells"]
     if not isinstance(raw_cells, list) or len(raw_cells) != 24:
         raise ValueError("benchmark manifest must contain exactly 24 cells")
+    evidence = _exact_fields(
+        manifest["evidence"], set(_EVIDENCE_PATHS), "benchmark evidence inventory"
+    )
 
     cells: list[BenchmarkCellResult] = []
+    provenances: list[ModelProvenance] = []
     seen: set[tuple[str, str]] = set()
     for index, raw_cell in enumerate(raw_cells):
         values = _exact_fields(raw_cell, _CELL_FIELDS, f"cells[{index}]")
@@ -658,6 +1043,8 @@ def load_benchmark_matrix(directory: str | os_types.PathLike[str]) -> BenchmarkM
             raise ValueError("manifest cells must use canonical scenario/variant order")
         metrics = _parse_metrics(values["controller_metrics"])
         provenance = _parse_provenance(values["model_provenance"])
+        if provenance is not None:
+            provenances.append(provenance)
         assumptions = _parse_assumptions(values["forecast_assumptions"])
         fault = _parse_fault(values["fault_detection"])
         cell = BenchmarkCellResult(
@@ -686,6 +1073,7 @@ def load_benchmark_matrix(directory: str | os_types.PathLike[str]) -> BenchmarkM
     }
     if seen != required:
         raise ValueError("manifest matrix is incomplete")
+    _validate_embedded_evidence(root, evidence, tuple(provenances))
     return BenchmarkMatrix(mode=mode, cells=tuple(cells))
 
 
