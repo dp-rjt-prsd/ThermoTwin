@@ -150,40 +150,67 @@ sample artifacts and their figures are not committed with the source repository.
 
 ## Dashboard
 
-The V2 dashboard is a judge-focused thermal control room with five views:
+The Streamlit dashboard is a judge-focused thermal control room with four views:
 
-- **Guided Demo** explains the physical heat-flow and control story step by step.
-- **Live Thermal Lab** provides deterministic playback of a saved trajectory.
-- **Cooling Comparison** compares reactive and predictive controller evidence.
-- **Fault Lab** separates operator-visible anomaly evidence from injected truth.
-- **Saved Evidence** preserves the immutable artifact-review and export workflow.
+- **Guided Demo** walks through seven steps (energy enters, heat moves, cooling
+  responds, twin forecasts, controller decides, fault emerges, evidence). Each
+  step has its own visual built from saved evidence, ◀ Prev / Next ▶ navigation,
+  and the equations for that step. Examples: per-cell I²R heat, conduction arrows
+  sized by (T_hot − T_cold)/R_th, and measured vs forecast pack maps on one
+  shared colour scale.
+- **Live Thermal Lab** runs the authoritative pack simulator on demand. You set
+  load, environment, controller and fault conditions in one form, press
+  **Run simulation**, then play the result back with Play/Pause, 1×/2×/4× speed
+  and a scrub timeline. The heatmap, telemetry, energy-balance cards and chart
+  cursors move together. Predictive controllers always plan with their own saved
+  twin; reactive controllers can show a twin forecast overlay.
+- **Controllers & Twins** shows the six-scenario × four-controller benchmark,
+  one metric at a time, plus a scorecard, twin forecast error by horizon, physics
+  residuals, the saved controller time series, and provenance, limitations and
+  CSV/JSON downloads.
+- **Fault Lab** separates the operator view (suspected cell, score, detection
+  time, per-cell detector scores, pack state at detection) from the
+  evaluation-only injected-fault truth.
 
-Every view links its visual evidence to the applicable thermal, control, model,
-or diagnostic equations. The primary display uses Celsius for judge readability;
-saved values and detailed provenance retain SI units and Kelvin where relevant.
+Every view links its visuals to the thermal, control, model or diagnostic
+equations behind them, and the sidebar has an equation explorer. Display values
+use Celsius; hover text, provenance and downloads keep SI units and kelvin.
+Figures are built in `visualization/judge_figures.py`. The original Kelvin
+figures in `visualization/plots.py` remain for the artifact-level API.
 
-The dashboard reads validated predictive and fault artifacts; it does not run
-simulation or training. The “Live Thermal Lab” is saved-trajectory playback, not
-a substitute simulator. For a dashboard-specific pair of runs, create new output
-directories using the same full comparison directory:
+The dashboard never trains models. Guided Demo, Controllers & Twins and Fault Lab
+read validated saved artifacts only. The Live Thermal Lab runs the simulator and
+loads the saved twins from `results/phase12-final-comparison`. To create a
+dashboard-specific pair of runs, use new output directories and the same full
+comparison directory:
 
 ```bash
 python scripts/run_predictive.py --comparison-directory results/phase12-comparison --seed 1729 --output-directory results/phase12-dashboard-predictive
 python scripts/run_fault_detection.py --comparison-directory results/phase12-comparison --model-variant physics_informed --seed 1729 --output-directory results/phase12-dashboard-fault
-python scripts/run_dashboard.py --predictive-directory results/phase12-dashboard-predictive --fault-directory results/phase12-dashboard-fault
+python scripts/run_dashboard.py --predictive-directory results/phase12-dashboard-predictive --fault-directory results/phase12-dashboard-fault --evaluation-directory results/phase12-final-evaluation
 ```
 
+`--evaluation-directory` is optional. It accepts a final-evaluation export, or its
+`evaluation/` folder, and feeds the benchmark and twin-accuracy panels. If you
+omit it, the dashboard uses `results/phase12-final-evaluation` when that folder
+exists. Otherwise those panels show a hint instead of charts.
+
 `run_dashboard.py` validates the artifacts and sets
-`THERMOTWIN_PREDICTIVE_RESULTS` and `THERMOTWIN_FAULT_RESULTS` for Streamlit.
-The wrapper is the recommended launch method. To launch Streamlit directly from
-PowerShell, set those variables to the predictive and fault artifact directories
-first:
+`THERMOTWIN_PREDICTIVE_RESULTS`, `THERMOTWIN_FAULT_RESULTS` and, when given,
+`THERMOTWIN_EVALUATION_RESULTS` for Streamlit. It also passes the dashboard
+theme, so it works from any directory, and it is the recommended way to launch.
+To launch Streamlit directly from PowerShell, run it from the repository root so
+`.streamlit/config.toml` supplies the theme, and set the variables first:
 
 ```powershell
 $env:THERMOTWIN_PREDICTIVE_RESULTS = "results/phase12-dashboard-predictive"
 $env:THERMOTWIN_FAULT_RESULTS = "results/phase12-dashboard-fault"
+$env:THERMOTWIN_EVALUATION_RESULTS = "results/phase12-final-evaluation"
 python -m streamlit run src/thermotwin/visualization/dashboard.py
 ```
+
+The artifact paths can also be changed at runtime in the sidebar under
+**Evidence sources**.
 
 The authoritative health endpoint is `http://localhost:8501/_stcore/health`; a
 healthy server returns HTTP 200 with `ok`.
@@ -206,6 +233,20 @@ byte-identically across its eight published files. Dashboard checks included 21
 focused tests and 10 later dashboard tests; Streamlit AppTest exercised 24
 control combinations without an exception. The headless health endpoint returned
 HTTP 200 with `ok`.
+
+The later four-view dashboard rework was checked in two ways:
+
+- **Automated checks:** focused pytest suites (`tests/test_dashboard.py`,
+  `tests/test_judge_figures.py`, `tests/test_visualization_plots.py`,
+  `tests/test_dashboard_presentation.py`), Ruff, and strict mypy. AppTest covers
+  every view, every Guided Demo step, all Live Lab paths (run, play/pause, scrub,
+  fault-start clamping), and each benchmark metric.
+- **Browser walkthrough:** the dashboard was driven in headless Microsoft Edge
+  over the DevTools protocol at 1600 px width, clicking through the views with
+  no rendered exceptions.
+
+The audit statement below still applies to the original release audit. The
+rework browser check was desktop-width only.
 
 No real browser/DevTools tool was available for this audit. The narrow viewport
 and accessibility tree were therefore not visually verified, so responsive and
