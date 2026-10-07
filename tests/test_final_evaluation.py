@@ -4,19 +4,19 @@ import csv
 import hashlib
 import io
 import json
+import os
 import shutil
+from collections.abc import Callable
 from dataclasses import replace
+from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
-import thermotwin.experiments.final_evaluation as final_evaluation_module
-from test_benchmark_serialization import (
-    _execution_with_evidence,
-    save_benchmark_execution,
-)
 from thermotwin.data.model_dataset import _expected_columns
+from thermotwin.experiments.benchmark import BenchmarkExecution
+from thermotwin.experiments.benchmark_serialization import save_benchmark_execution
 from thermotwin.experiments.benchmark_types import (
     ArtifactReference,
     BenchmarkMatrix,
@@ -32,6 +32,11 @@ from thermotwin.experiments.final_evaluation import (
 _MODELS = ("data_only", "physics_informed")
 _DISTRIBUTIONS = ("in_distribution", "out_of_distribution")
 _HORIZONS = (30.0, 60.0, 120.0)
+_fixture_module = import_module("test_benchmark_serialization")
+_execution_with_evidence = cast(
+    Callable[[BenchmarkMode], tuple[BenchmarkExecution, dict[str, bytes]]],
+    _fixture_module._execution_with_evidence,
+)
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -83,7 +88,7 @@ def _make_inputs(
     training_mode: TrainingMode | None = None,
     comparison_smoke: bool | None = None,
 ) -> tuple[Path, Path, Path, Path, Path]:
-    execution, evidence = _execution_with_evidence(benchmark_mode)
+    execution, evidence_files = _execution_with_evidence(benchmark_mode)
     selected_training_mode = training_mode or (
         "smoke" if benchmark_mode == "quick" else "full"
     )
@@ -93,25 +98,25 @@ def _make_inputs(
     manifests: dict[str, dict[str, Any]] = {}
     for distribution in _DISTRIBUTIONS:
         manifest_path = f"dataset/{distribution}/manifest.json"
-        manifest = json.loads(evidence[manifest_path])
+        manifest = json.loads(evidence_files[manifest_path])
         manifest["columns"] = list(_expected_columns(12))
         manifests[distribution] = manifest
-        evidence[manifest_path] = (
+        evidence_files[manifest_path] = (
             json.dumps(manifest, sort_keys=True, indent=2).encode() + b"\n"
         )
     comparison_provenance_path = "comparison/provenance.json"
-    comparison_provenance = json.loads(evidence[comparison_provenance_path])
+    comparison_provenance = json.loads(evidence_files[comparison_provenance_path])
     comparison_provenance["smoke_test"] = selected_comparison_smoke
     for distribution in _DISTRIBUTIONS:
         comparison_provenance["datasets"][distribution]["manifest"] = manifests[
             distribution
         ]
-    evidence[comparison_provenance_path] = (
+    evidence_files[comparison_provenance_path] = (
         json.dumps(comparison_provenance, sort_keys=True, indent=2).encode() + b"\n"
     )
     comparison_reference = ArtifactReference(
         comparison_provenance_path,
-        hashlib.sha256(evidence[comparison_provenance_path]).hexdigest(),
+        hashlib.sha256(evidence_files[comparison_provenance_path]).hexdigest(),
     )
     cells = []
     for cell in execution.matrix.cells:
@@ -125,7 +130,7 @@ def _make_inputs(
                     ArtifactReference(
                         f"dataset/{distribution}/manifest.json",
                         hashlib.sha256(
-                            evidence[f"dataset/{distribution}/manifest.json"]
+                            evidence_files[f"dataset/{distribution}/manifest.json"]
                         ).hexdigest(),
                     )
                     for distribution in _DISTRIBUTIONS
@@ -138,11 +143,11 @@ def _make_inputs(
         matrix=BenchmarkMatrix(benchmark_mode, tuple(cells)),
     )
     benchmark = save_benchmark_execution(
-        execution, root / "benchmark", evidence_files=evidence
+        execution, root / "benchmark", evidence_files=evidence_files
     )
     comparison = root / "comparison-input"
     comparison.mkdir()
-    evidence = benchmark / "comparison"
+    benchmark_comparison_dir = benchmark / "comparison"
     for filename in (
         "data_only.pt",
         "physics_informed.pt",
@@ -150,7 +155,7 @@ def _make_inputs(
         "normalization.json",
         "provenance.json",
     ):
-        shutil.copyfile(evidence / filename, comparison / filename)
+        shutil.copyfile(benchmark_comparison_dir / filename, comparison / filename)
     for _label, filename in (
         ("in_distribution", "id_comparison_metrics.json"),
         ("out_of_distribution", "ood_comparison_metrics.json"),
@@ -661,7 +666,7 @@ def test_save_failure_cleans_only_its_staging_directory(
     def fail_fsync(_descriptor: int) -> None:
         raise OSError("injected persistence failure")
 
-    monkeypatch.setattr(final_evaluation_module.os, "fsync", fail_fsync)
+    monkeypatch.setattr(os, "fsync", fail_fsync)
     with pytest.raises(OSError, match="injected persistence failure"):
         save_final_evaluation(evaluation, tmp_path / "final")
 

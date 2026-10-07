@@ -9,12 +9,17 @@ from thermotwin.experiments.benchmark_types import (
     SCENARIO_IDS,
     VARIANT_IDS,
     ArtifactReference,
+    BenchmarkMode,
     ControllerMetrics,
+    EvaluationDistribution,
     FaultDetectionOutcome,
     ModelEvaluationMetrics,
     ModelProvenance,
+    ModelVariant,
+    TrainingMode,
 )
 from thermotwin.experiments.final_evaluation import (
+    EvidenceStatus,
     FinalEvaluation,
     FinalForecastMetrics,
     MetricComparison,
@@ -29,6 +34,13 @@ from thermotwin.visualization.benchmark_plots import (
     physics_residual_figure,
     thermal_energy_tradeoff_figure,
 )
+
+_MODEL_VARIANTS: tuple[ModelVariant, ...] = ("data_only", "physics_informed")
+_DISTRIBUTIONS: tuple[EvaluationDistribution, ...] = (
+    "in_distribution",
+    "out_of_distribution",
+)
+_FORECAST_HORIZONS_S = (30.0, 60.0, 120.0)
 
 
 def _controller_metrics(variant_index: int, scenario_index: int) -> ControllerMetrics:
@@ -45,11 +57,13 @@ def _controller_metrics(variant_index: int, scenario_index: int) -> ControllerMe
 
 def _evaluation(
     *,
-    mode: str = "quick",
+    mode: BenchmarkMode = "quick",
     fault: FaultDetectionOutcome | None = None,
 ) -> FinalEvaluation:
-    status = "workflow_only" if mode == "quick" else "descriptive_synthetic_benchmark"
-    training_mode = "smoke" if mode == "quick" else "full"
+    status: EvidenceStatus = (
+        "workflow_only" if mode == "quick" else "descriptive_synthetic_benchmark"
+    )
+    training_mode: TrainingMode = "smoke" if mode == "quick" else "full"
 
     def reference(label: str) -> ArtifactReference:
         return ArtifactReference(label, "a" * 64)
@@ -65,7 +79,7 @@ def _evaluation(
             comparison_provenance=reference(f"{model}/comparison"),
             dataset_manifests=(reference(f"{model}/dataset"),),
         )
-        for model in ("data_only", "physics_informed")
+        for model in _MODEL_VARIANTS
     )
     model_metrics = tuple(
         ModelEvaluationMetrics(
@@ -79,10 +93,8 @@ def _evaluation(
             maximum_absolute_physics_residual_w=6.0 + model_index + distribution_index,
             sample_count=10,
         )
-        for model_index, model in enumerate(("data_only", "physics_informed"))
-        for distribution_index, distribution in enumerate(
-            ("in_distribution", "out_of_distribution")
-        )
+        for model_index, model in enumerate(_MODEL_VARIANTS)
+        for distribution_index, distribution in enumerate(_DISTRIBUTIONS)
     )
     forecasts = tuple(
         FinalForecastMetrics(
@@ -97,11 +109,9 @@ def _evaluation(
             forecast_count=5,
             step_count=int(horizon),
         )
-        for model_index, model in enumerate(("data_only", "physics_informed"))
-        for distribution_index, distribution in enumerate(
-            ("in_distribution", "out_of_distribution")
-        )
-        for horizon in (30.0, 60.0, 120.0)
+        for model_index, model in enumerate(_MODEL_VARIANTS)
+        for distribution_index, distribution in enumerate(_DISTRIBUTIONS)
+        for horizon in _FORECAST_HORIZONS_S
     )
     controllers = tuple(
         ScenarioControllerMetrics(
@@ -130,7 +140,7 @@ def _evaluation(
     )
 
 
-def _assert_evidence_and_limitation(figure: Figure, mode: str) -> None:
+def _assert_evidence_and_limitation(figure: Figure, mode: BenchmarkMode) -> None:
     title = str(figure.layout.title.text) + " " + " ".join(
         str(annotation.text) for annotation in figure.layout.annotations or ()
     )

@@ -114,9 +114,9 @@ def _evidence(mode: BenchmarkMode) -> dict[str, bytes]:
         "distribution_labels": ["in_distribution", "out_of_distribution"],
         "smoke_test": mode == "quick",
     }
-    encode = lambda value: (  # noqa: E731
-        json.dumps(value, sort_keys=True, indent=2).encode() + b"\n"
-    )
+    def encode(value: object) -> bytes:
+        return json.dumps(value, sort_keys=True, indent=2).encode() + b"\n"
+
     return {
         "comparison/data_only.pt": checkpoint,
         "comparison/physics_informed.pt": checkpoint,
