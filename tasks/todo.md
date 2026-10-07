@@ -349,10 +349,11 @@ Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of
   - Verify: `python -m pytest tests/test_benchmark_controllers.py`.
   - Dependencies: TASK-65.
   - Accepted: the immutable factory returns fresh threshold, PID, data-only predictive, and physics-informed predictive controllers with scenario-derived limits and explicit no-future-truth persistence assumptions. Leakage/bounds/freshness validation passed with 26 tests, Ruff, and strict mypy.
-- [ ] Checkpoint P12A: stabilization and benchmark contracts accepted before suite execution.
+- [x] Checkpoint P12A: stabilization and benchmark contracts accepted before suite execution.
   - Acceptance: TASK-61 through TASK-67 focused tests, Ruff, strict mypy, and diff review pass; the two disjoint TASK-66/TASK-67 scopes are integrated without contract drift.
   - Verify: focused tests above; `python -m ruff check .`; `python -m mypy src tests scripts`.
   - Dependencies: TASK-66, TASK-67.
+  - Accepted: TASK-61 through TASK-67 focused gates passed; the disjoint scenario/controller branches integrated against the frozen contracts with 83 tests. Repository-wide Ruff passed and strict mypy passed across 126 source files; the working tree was clean.
 - [ ] TASK-68 Execute and persist the full 6-by-4 benchmark matrix.
   - Scope: `src/thermotwin/experiments/benchmark.py`; `src/thermotwin/experiments/benchmark_serialization.py`; `tests/test_benchmark.py`; `tests/test_benchmark_serialization.py`.
   - Acceptance: all four variants run each identical scenario/seed/state/configuration; non-overwriting artifacts retain traces, metrics, identity, configuration, seed, model/dataset/checkpoint provenance, and completeness state; partial output cannot appear complete.
