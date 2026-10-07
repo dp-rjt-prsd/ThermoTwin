@@ -1,14 +1,33 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import plotly.graph_objects as go  # type: ignore[import-untyped]
 import pytest
-import scripts.final_evaluation as final_evaluation_script
 
 from test_final_evaluation import _make_inputs
+
+_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPT = _ROOT / "scripts" / "final_evaluation.py"
+
+
+def _load_final_evaluation_script() -> ModuleType:
+    module_name = "thermotwin_final_evaluation_script_for_tests"
+    spec = importlib.util.spec_from_file_location(module_name, _SCRIPT)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not load final-evaluation script for tests")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+final_evaluation_script = _load_final_evaluation_script()
 
 _FIGURES = (
     "controller_matrix.html",
@@ -151,7 +170,13 @@ def test_unexpected_aggregation_type_error_propagates_without_publication(
 def test_missing_or_malformed_sources_fail_without_traceback(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    missing_sources = tuple(tmp_path / name for name in ("b", "c", "id", "ood", "f"))
+    missing_sources = (
+        tmp_path / "b",
+        tmp_path / "c",
+        tmp_path / "id",
+        tmp_path / "ood",
+        tmp_path / "f",
+    )
     assert final_evaluation_script.main(
         _arguments(missing_sources, tmp_path / "missing-output")
     ) == 2
