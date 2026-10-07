@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import math
 import os
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -277,3 +279,64 @@ def test_missing_inputs_and_existing_output_return_two_without_overwrite(
     )
     assert marker.read_text(encoding="utf-8") == "preserve"
     assert _all_files(output) == {"keep.txt"}
+
+
+def test_empty_test_split_returns_actionable_cli_error_without_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spec = importlib.util.spec_from_file_location("forecast_cli_test", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    evaluate_forecasts = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evaluate_forecasts)
+    comparison = tmp_path / "comparison"
+    dataset = tmp_path / "dataset"
+    comparison.mkdir()
+    dataset.mkdir()
+    monkeypatch.setattr(
+        evaluate_forecasts,
+        "_load_model_config",
+        lambda _path: SimpleNamespace(output_dim=12),
+    )
+    monkeypatch.setattr(
+        evaluate_forecasts,
+        "_load_normalization",
+        lambda _path: object(),
+    )
+    monkeypatch.setattr(
+        evaluate_forecasts,
+        "_checkpoint",
+        lambda _path, _config: object(),
+    )
+    monkeypatch.setattr(
+        evaluate_forecasts,
+        "load_transition_artifacts",
+        lambda _path, _normalization: SimpleNamespace(
+            test=(),
+            base_environment_config=SimpleNamespace(
+                cooling=SimpleNamespace(
+                    minimum_coolant_mass_flow_kg_s=0.0,
+                    maximum_coolant_mass_flow_kg_s=1.0,
+                )
+            ),
+            model_datasets=SimpleNamespace(cell_count=12),
+        ),
+    )
+
+    result = evaluate_forecasts.main(
+        [
+            "--comparison-directory",
+            str(comparison),
+            "--dataset-directory",
+            str(dataset),
+            "--output-directory",
+            str(tmp_path / "evaluation"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 2
+    assert captured.out == ""
+    assert captured.err.startswith("evaluate_forecasts: error: ")
+    assert "test split contains no transitions" in captured.err
+    assert "IndexError" not in captured.err
+    assert "Traceback" not in captured.err

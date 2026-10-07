@@ -252,9 +252,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         artifacts = load_transition_artifacts(dataset, normalization)
         test_records = artifacts.test
         cooling = artifacts.base_environment_config.cooling
-        timestep = float(test_records[0].time_step_s)
         if not test_records:
             raise ValueError("evaluation dataset test split contains no transitions")
+        timestep = float(test_records[0].time_step_s)
         if model_config.output_dim != artifacts.model_datasets.cell_count:
             raise ValueError(
                 "checkpoint model cell count does not match evaluation dataset"

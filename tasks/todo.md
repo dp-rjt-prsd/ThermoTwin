@@ -307,11 +307,12 @@
 
 Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of CI coverage, statistical significance, production safety, or generalization beyond the configured synthetic runs. Threshold is the primary reactive baseline and PID is supplemental. Every scenario must run threshold, PID, predictive/data-only, and predictive/physics-informed variants from the identical scenario. Predictive control must disclose exogenous persistence and must not consume future simulator truth.
 
-- [ ] TASK-61 Fix the empty forecast-evaluation split regression.
+- [x] TASK-61 Fix the empty forecast-evaluation split regression.
   - Scope: `scripts/evaluate_forecasts.py`; `tests/test_forecast_script.py`.
   - Acceptance: an empty test split fails before indexing with a concise actionable CLI error, while valid evaluation and non-overwrite behavior remain unchanged.
   - Verify: `python -m pytest tests/test_forecast_script.py`.
   - Dependencies: TASK-60.
+  - Accepted: regression first reproduced the uncaught `IndexError`; the guard now rejects an empty test split before indexing. Focused verification passed with 5 tests, Ruff, and strict mypy.
 - [ ] TASK-62 Freeze a common-source/common-action forecast snapshot contract.
   - Scope: `scripts/run_predictive.py`; `tests/test_predictive_experiment.py`.
   - Acceptance: both model variants use and persist the exact same identified measured source state/time and legal action for all required horizons; mismatches are rejected.
