@@ -53,6 +53,9 @@ class PredictiveObjectiveWeights:
     temperature_spread_weight: float
     pump_energy_weight: float
     safety_penalty_weight: float
+    # Peak temperature is only penalised above this reference (kelvin). The
+    # default of zero keeps the original absolute peak-temperature cost.
+    peak_temperature_reference_k: float = 0.0
 
     def __post_init__(self) -> None:
         for name in (
@@ -60,6 +63,7 @@ class PredictiveObjectiveWeights:
             "temperature_spread_weight",
             "pump_energy_weight",
             "safety_penalty_weight",
+            "peak_temperature_reference_k",
         ):
             object.__setattr__(
                 self, name, _nonnegative_real(name, getattr(self, name))

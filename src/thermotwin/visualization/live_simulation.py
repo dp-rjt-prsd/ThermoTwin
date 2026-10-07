@@ -251,6 +251,9 @@ def make_controller(
         ),
         objective_weights=PredictiveObjectiveWeights(
             peak_temperature_weight=float(weights["peak_temperature_weight"]),
+            peak_temperature_reference_k=float(
+                weights.get("peak_temperature_reference_k", 0.0)
+            ),
             temperature_spread_weight=float(weights["temperature_spread_weight"]),
             pump_energy_weight=float(weights["pump_energy_weight"]),
             safety_penalty_weight=float(weights["safety_penalty_weight"]),

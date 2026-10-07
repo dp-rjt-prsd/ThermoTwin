@@ -193,9 +193,15 @@ def _load_configuration() -> tuple[EnvironmentConfig, dict[str, Any]]:
         },
     )
     predictive_values = dict(predictive_values)
+    raw_weights = predictive_values["objective_weights"]
+    if type(raw_weights) is not dict:
+        raise ValueError("predictive_controller.objective_weights must be a mapping")
+    raw_weights = dict(raw_weights)
+    peak_reference = float(raw_weights.pop("peak_temperature_reference_k", 0.0))
     predictive_values["objective_weights"] = PredictiveObjectiveWeights(
+        peak_temperature_reference_k=peak_reference,
         **_mapping(
-            predictive_values["objective_weights"],
+            raw_weights,
             "predictive_controller.objective_weights",
             {
                 "peak_temperature_weight",

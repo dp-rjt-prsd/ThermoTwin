@@ -40,6 +40,10 @@ predictive_controller:
     temperature_spread_weight: 1.0
     pump_energy_weight: 0.0001
     safety_penalty_weight: 100.0
+    # Comfort band: forecast peaks below 33 C (306.15 K) cost nothing, so the
+    # controller only spends pump energy when the twin predicts the pack heading
+    # above it. The safety penalty still applies above the 40 C limit.
+    peak_temperature_reference_k: 306.15
 
 thermal_safety_limit_k: 313.15
 

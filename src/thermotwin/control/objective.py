@@ -55,7 +55,8 @@ def evaluate_predictive_candidate(
             for state in rollout.states
             for temperature in state.cell_temperatures_k
         )
-        peak_cost = peak_temperature * weights.peak_temperature_weight
+        peak_excess = max(peak_temperature - weights.peak_temperature_reference_k, 0.0)
+        peak_cost = peak_excess * weights.peak_temperature_weight
         spread_cost = maximum_spread * weights.temperature_spread_weight
         pump_cost = pump_energy * weights.pump_energy_weight
         safety_cost = safety_penalty * weights.safety_penalty_weight

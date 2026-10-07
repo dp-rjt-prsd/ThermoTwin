@@ -548,9 +548,14 @@ def _load_controller_parameters() -> tuple[BenchmarkControllerParameters, float,
         != pump_coefficient
     ):
         raise ValueError("predictive limits must match benchmark.yaml")
+    raw_weights = predictive["objective_weights"]
+    if type(raw_weights) is not dict:
+        raise ValueError("predictive objective weights must be a mapping")
+    raw_weights = dict(raw_weights)
+    peak_reference = raw_weights.pop("peak_temperature_reference_k", 0.0)
     weights = PredictiveObjectiveWeights(
         **_exact_mapping(
-            predictive["objective_weights"],
+            raw_weights,
             "predictive objective weights",
             {
                 "peak_temperature_weight",
@@ -558,7 +563,10 @@ def _load_controller_parameters() -> tuple[BenchmarkControllerParameters, float,
                 "pump_energy_weight",
                 "safety_penalty_weight",
             },
-        )
+        ),
+        peak_temperature_reference_k=_canonical_number(
+            peak_reference, "predictive peak temperature reference"
+        ),
     )
     span = maximum - minimum
     fractions = cast(
