@@ -66,14 +66,18 @@ def _temperature_history_figure(
 def _fault_indicators(
     summary: FaultSummary,
 ) -> FaultEvent | None:
-    """Select the latest persisted detector event; ties prefer score then cell ID."""
+    """Select the strongest detector event, then earliest time and lowest cell ID.
+
+    Ranking uses only persisted detector evidence. Injected-fault truth is reserved
+    for the separately labeled evaluation panel.
+    """
     if not summary.events:
         return None
     return max(
         summary.events,
         key=lambda event: (
-            event.detection_time_s,
             event.anomaly_score,
+            -event.detection_time_s,
             -event.cell_index,
         ),
     )
@@ -180,14 +184,12 @@ def render_dashboard(data: DashboardData) -> None:
         event.predicted_hotspot_temperature_k if event is not None else None
     )
     detection_time = event.detection_time_s if event is not None else None
+    severity = event.severity_k if event is not None else None
     st.subheader("Fault detection (operator view)")
     fault_columns = st.columns(3)
-    fault_columns[0].markdown(
-        "**Suspected cell**\n\n" + suspected_cell
-    )
-    fault_columns[1].markdown(
-        "**Anomaly score**\n\n" + _fault_value(anomaly_score, "")
-    )
+    fault_columns[0].markdown("**Suspected cell**\n\n" + suspected_cell)
+    fault_columns[1].markdown("**Anomaly score**\n\n" + _fault_value(anomaly_score, ""))
+    fault_columns[1].markdown("**Severity**\n\n" + _fault_value(severity, "K"))
     fault_columns[2].markdown(
         "**Predicted hotspot**\n\n" + _fault_value(predicted_hotspot, "K")
     )

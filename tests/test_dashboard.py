@@ -67,6 +67,16 @@ def test_dashboard_renders_artifacts_with_selectors_metrics_and_fault_panel(
     assert any(
         "Suspected cell" in value and "Unavailable" in value for value in markdown
     )
+    assert any(
+        "Anomaly score" in value and "Unavailable" in value for value in markdown
+    )
+    assert any(
+        "Detection time" in value and "Unavailable" in value for value in markdown
+    )
+    assert any(
+        "Predicted hotspot" in value and "Unavailable" in value for value in markdown
+    )
+    assert any("Severity" in value and "Unavailable" in value for value in markdown)
     chart_keys = (
         "measured_heatmap",
         "predicted_heatmap",
@@ -178,25 +188,32 @@ def test_temperature_figure_uses_trace_limit_not_fault_limit(tmp_path: Path) -> 
     assert set(limit_trace.y) == {337.0}
 
 
-def test_fault_indicators_choose_latest_event_independent_of_injected_cell(
+def test_fault_indicators_choose_strongest_event_not_latest_or_injected_cell(
     tmp_path: Path,
 ) -> None:
     predictive, fault = make_artifacts(tmp_path)
     data = load_dashboard_data(predictive, fault)
     summary = data.fault_summary
-    unrelated_event = FaultEvent(
-        cell_index=3,
-        anomaly_score=99.0,
-        detection_time_s=5.0,
-        predicted_hotspot_temperature_k=399.0,
-        severity_k=20.0,
+    stronger_early_event = FaultEvent(
+        cell_index=2,
+        anomaly_score=213.88,
+        detection_time_s=15.0,
+        predicted_hotspot_temperature_k=312.75,
+        severity_k=12.75,
+    )
+    weaker_late_event = FaultEvent(
+        cell_index=1,
+        anomaly_score=4.75,
+        detection_time_s=23.0,
+        predicted_hotspot_temperature_k=308.25,
+        severity_k=3.25,
     )
     fallback_summary = replace(
-        summary, anomaly_event_count=1, events=(unrelated_event,)
+        summary, anomaly_event_count=2, events=(weaker_late_event, stronger_early_event)
     )
 
-    latest_event = _fault_indicators(fallback_summary)
-    assert latest_event == unrelated_event
+    primary_event = _fault_indicators(fallback_summary)
+    assert primary_event == stronger_early_event
 
     target_event = FaultEvent(
         cell_index=summary.fault_cell_index,
@@ -215,11 +232,74 @@ def test_fault_indicators_choose_latest_event_independent_of_injected_cell(
     event_summary = replace(
         summary,
         anomaly_event_count=3,
-        events=(unrelated_event, target_event, tied_event),
+        events=(weaker_late_event, target_event, tied_event),
     )
     event = _fault_indicators(event_summary)
 
     assert event == tied_event
+
+
+def test_fault_operator_panel_uses_one_primary_detector_event_for_all_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    predictive, fault = make_artifacts(tmp_path)
+    data = load_dashboard_data(predictive, fault)
+    summary = data.fault_summary
+    primary_event = FaultEvent(
+        cell_index=5,
+        anomaly_score=213.88,
+        detection_time_s=15.0,
+        predicted_hotspot_temperature_k=312.75,
+        severity_k=12.75,
+    )
+    weak_later_event = FaultEvent(
+        cell_index=1,
+        anomaly_score=4.75,
+        detection_time_s=23.0,
+        predicted_hotspot_temperature_k=308.25,
+        severity_k=3.25,
+    )
+    data = replace(
+        data,
+        fault_summary=replace(
+            summary, anomaly_event_count=2, events=(weak_later_event, primary_event)
+        ),
+    )
+    markdown: list[str] = []
+
+    class _Column:
+        def metric(self, *_args: object) -> None:
+            return None
+
+        def markdown(self, value: str) -> None:
+            markdown.append(value)
+
+        def plotly_chart(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    fake_streamlit = SimpleNamespace(
+        title=lambda *_args: None,
+        caption=lambda *_args: None,
+        selectbox=lambda label, options, **_kwargs: {
+            "Controller": "Reactive threshold",
+            "Thermal twin model": "Data-only",
+            "Forecast horizon (seconds)": 120,
+        }[label],
+        columns=lambda count: [_Column() for _ in range(count)],
+        subheader=lambda *_args: None,
+        markdown=lambda value: markdown.append(value),
+        plotly_chart=lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(dashboard_module, "st", fake_streamlit)
+
+    dashboard_module.render_dashboard(data)
+
+    assert "**Suspected cell**\n\nC6" in markdown
+    assert "**Anomaly score**\n\n213.88" in markdown
+    assert "**Detection time**\n\n15.00 s" in markdown
+    assert "**Predicted hotspot**\n\n312.75 K" in markdown
+    assert "**Severity**\n\n12.75 K" in markdown
+    assert any("Configured injected-fault cell: C5" in value for value in markdown)
 
 
 def test_fault_indicators_show_no_suspected_cell_without_detector_events(
