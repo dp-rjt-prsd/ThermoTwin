@@ -24,10 +24,15 @@ pip-wheel-metadata/
 .env
 .env.*
 !.env.example
+.streamlit/secrets.toml
 *.pem
 *.key
 secrets.yaml
 secrets.yml
+*.log
+
+# Local design-tool workspace
+.superdesign/
 
 # Generated datasets, model checkpoints, and experiment results
 data/generated/**

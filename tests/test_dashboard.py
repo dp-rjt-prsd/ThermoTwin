@@ -43,50 +43,65 @@ def test_dashboard_renders_artifacts_with_selectors_metrics_and_fault_panel(
 
     assert not app.exception
     assert any("ThermoTwin" in item.value for item in app.title)
-    assert any("fault-induced thermal anomaly" in item.value for item in app.caption)
-    assert any("synthetic" in item.value for item in app.caption)
+    rendered_copy = [item.value for item in app.caption] + [
+        item.value for item in app.info
+    ]
+    assert any("synthetic" in value.lower() for value in rendered_copy)
     assert all("thermal-runaway" not in item.value for item in app.caption)
-    assert len(app.metric) == 6
-    assert len(app.selectbox) == 3
+    assert len(app.metric) >= 6
+    assert len(app.selectbox) >= 4
     assert {item.label for item in app.selectbox} >= {
         "Controller",
         "Thermal twin model",
         "Forecast horizon (seconds)",
+        "Equation explorer",
     }
-    assert any(item.value == "301.00 K" for item in app.metric)
     markdown = [item.value for item in app.markdown]
-    assert any("Suspected cell" in value for value in markdown)
-    assert any(
-        "Evaluation-only injected-fault truth/outcome" in item.value
-        for item in app.subheader
-    )
-    assert any(
-        "Configured injected-fault cell" in value and "C5" in value
-        for value in markdown
-    )
-    assert any(
-        "Suspected cell" in value and "Unavailable" in value for value in markdown
-    )
-    assert any(
-        "Anomaly score" in value and "Unavailable" in value for value in markdown
-    )
-    assert any(
-        "Detection time" in value and "Unavailable" in value for value in markdown
-    )
-    assert any(
-        "Predicted hotspot" in value and "Unavailable" in value for value in markdown
-    )
-    assert any("Severity" in value and "Unavailable" in value for value in markdown)
+    assert any("Evaluation-only injected-fault truth" in value for value in markdown)
+    assert any("Configured cell C5" in value for value in markdown)
     chart_keys = (
-        "measured_heatmap",
-        "predicted_heatmap",
-        "temperature_history",
-        "coolant_flow_history",
-        "controller_comparison",
-        "model_forecast_comparison",
-        "fault_diagnostics",
+        "v2_guided_measured_heatmap",
+        "v2_guided_predicted_heatmap",
+        "v2_guided_controller_comparison",
     )
     assert all(app.get_by_key(key) is not None for key in chart_keys)
+
+
+def test_dashboard_v2_navigation_renders_every_judge_view(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    predictive, fault = make_artifacts(tmp_path)
+    app = _run_dashboard(predictive, fault, monkeypatch)
+
+    assert not app.exception
+    workspace = next(item for item in app.radio if item.label == "Workspace")
+
+    workspace.set_value("Live Thermal Lab")
+    app.run()
+    assert not app.exception
+    assert app.get_by_key("v2_live_heatmap") is not None
+    assert app.get_by_key("v2_live_temperature_history") is not None
+
+    workspace = next(item for item in app.radio if item.label == "Workspace")
+    workspace.set_value("Cooling Comparison")
+    app.run()
+    assert not app.exception
+    assert app.get_by_key("v2_cooling_controller_matrix") is not None
+    assert app.get_by_key("v2_cooling_forecast_comparison") is not None
+
+    workspace = next(item for item in app.radio if item.label == "Workspace")
+    workspace.set_value("Fault Lab")
+    app.run()
+    assert not app.exception
+    assert app.get_by_key("v2_fault_diagnostics") is not None
+    assert app.get_by_key("v2_fault_scores") is not None
+
+    workspace = next(item for item in app.radio if item.label == "Workspace")
+    workspace.set_value("Saved Evidence")
+    app.run()
+    assert not app.exception
+    assert app.get_by_key("v2_evidence_measured_heatmap") is not None
+    assert app.get_by_key("v2_evidence_controller_comparison") is not None
 
 
 def test_dashboard_shows_instructions_for_empty_paths(
@@ -142,9 +157,7 @@ def test_launcher_builds_child_command_and_environment(
     launcher_module = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(launcher_module)
     launcher_namespace = cast(Any, launcher_module)
-    launcher_main = cast(
-        Callable[[Sequence[str] | None], int], launcher_namespace.main
-    )
+    launcher_main = cast(Callable[[Sequence[str] | None], int], launcher_namespace.main)
     launcher_subprocess = cast(Any, launcher_namespace.subprocess)
     launcher_sys = cast(ModuleType, launcher_namespace.sys)
 

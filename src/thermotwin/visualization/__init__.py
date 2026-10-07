@@ -1,4 +1,4 @@
-"""Artifact-only data contracts for ThermoTwin visualization."""
+"""Dashboard data contracts and visualization helpers."""
 
 from thermotwin.visualization.data import (
     ControllerTrace,

@@ -150,8 +150,21 @@ sample artifacts and their figures are not committed with the source repository.
 
 ## Dashboard
 
-The dashboard reads saved predictive and fault artifacts; it does not run
-simulation or training. For a dashboard-specific pair of runs, create new output
+The V2 dashboard is a judge-focused thermal control room with five views:
+
+- **Guided Demo** explains the physical heat-flow and control story step by step.
+- **Live Thermal Lab** provides deterministic playback of a saved trajectory.
+- **Cooling Comparison** compares reactive and predictive controller evidence.
+- **Fault Lab** separates operator-visible anomaly evidence from injected truth.
+- **Saved Evidence** preserves the immutable artifact-review and export workflow.
+
+Every view links its visual evidence to the applicable thermal, control, model,
+or diagnostic equations. The primary display uses Celsius for judge readability;
+saved values and detailed provenance retain SI units and Kelvin where relevant.
+
+The dashboard reads validated predictive and fault artifacts; it does not run
+simulation or training. The “Live Thermal Lab” is saved-trajectory playback, not
+a substitute simulator. For a dashboard-specific pair of runs, create new output
 directories using the same full comparison directory:
 
 ```bash

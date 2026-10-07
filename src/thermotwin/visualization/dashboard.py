@@ -1,4 +1,4 @@
-"""Artifact-only Streamlit dashboard for saved ThermoTwin experiments."""
+"""Streamlit entry point for the ThermoTwin judge-facing thermal dashboard."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from thermotwin.visualization.contracts import (
     FaultEvent,
     FaultSummary,
 )
+from thermotwin.visualization.dashboard_views import render_application
 from thermotwin.visualization.data import load_dashboard_data
 from thermotwin.visualization.plots import (
     controller_comparison_figure,
@@ -22,6 +23,7 @@ from thermotwin.visualization.plots import (
     pack_heatmap_figure,
     temperature_timeseries_figure,
 )
+from thermotwin.visualization.presentation import GLOBAL_CSS
 
 _CONTROLLERS = {
     "Reactive threshold": "threshold",
@@ -43,6 +45,14 @@ _METRIC_LABELS = (
 )
 
 
+@st.cache_resource(show_spinner="Validating saved ThermoTwin evidence…")
+def _load_dashboard_data_cached(
+    predictive_directory: str, fault_directory: str
+) -> DashboardData:
+    """Cache strict immutable artifact parsing for responsive navigation."""
+    return load_dashboard_data(predictive_directory, fault_directory)
+
+
 def _format_metric(value: float | int, unit: str) -> str:
     if unit:
         return f"{value:.2f} {unit}"
@@ -55,9 +65,7 @@ def _fault_value(value: float | int | None, unit: str) -> str:
     return _format_metric(value, unit)
 
 
-def _temperature_history_figure(
-    trace: ControllerTrace, *, title: str
-) -> Figure:
+def _temperature_history_figure(trace: ControllerTrace, *, title: str) -> Figure:
     return temperature_timeseries_figure(
         trace, thermal_limit_k=trace.thermal_limit_k, title=title
     )
@@ -212,10 +220,16 @@ def render_dashboard(data: DashboardData) -> None:
 
 
 def main() -> None:
-    """Load user-selected artifact roots and render the dashboard when valid."""
-    st.set_page_config(page_title="ThermoTwin", layout="wide")
+    """Load validated artifact roots and render the V2 judge experience."""
+    st.set_page_config(
+        page_title="ThermoTwin · Thermal Digital Twin",
+        page_icon="🌡️",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
     with st.sidebar:
-        st.header("Experiment artifacts")
+        st.header("Evidence sources")
         predictive_directory = st.text_input(
             "Predictive results directory",
             value=os.environ.get("THERMOTWIN_PREDICTIVE_RESULTS", ""),
@@ -227,10 +241,10 @@ def main() -> None:
             key="fault_directory",
         )
     if not predictive_directory.strip() or not fault_directory.strip():
-        st.title("ThermoTwin Battery Thermal Digital Twin")
+        st.title("ThermoTwin · Battery Thermal Digital Twin")
         st.caption(
-            "Review saved temperature forecasts, cooling comparisons, and "
-            "fault-induced thermal anomaly diagnostics."
+            "A judge-focused thermal control room for saved temperature forecasts, "
+            "cooling comparisons, and fault-induced anomaly evidence."
         )
         st.info(
             "Enter both artifact directories in the sidebar. Point them to saved "
@@ -238,12 +252,16 @@ def main() -> None:
         )
         return
     try:
-        data = load_dashboard_data(predictive_directory, fault_directory)
+        data = _load_dashboard_data_cached(predictive_directory, fault_directory)
     except (OSError, UnicodeError, ValueError) as exc:
-        st.title("ThermoTwin Battery Thermal Digital Twin")
+        st.title("ThermoTwin · Battery Thermal Digital Twin")
         st.error(f"Could not load dashboard artifacts: {exc}")
         return
-    render_dashboard(data)
+    render_application(
+        data,
+        predictive_directory=predictive_directory,
+        fault_directory=fault_directory,
+    )
 
 
 if __name__ == "__main__":
