@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import numpy as np
+import pytest
 import torch
 
 from thermotwin.data.model_dataset import feature_names, target_names
@@ -19,6 +22,20 @@ from thermotwin.models.mlp import ThermalMLP
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = _ROOT / "scripts" / "benchmark.py"
+
+
+def _load_benchmark_script() -> ModuleType:
+    module_name = "thermotwin_benchmark_script_for_tests"
+    spec = importlib.util.spec_from_file_location(module_name, _SCRIPT)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not load benchmark script for tests")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+benchmark_script = _load_benchmark_script()
 
 
 def _run(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -199,6 +216,81 @@ def test_missing_and_malformed_comparison_artifacts_fail_closed(
     assert not (tmp_path / "malformed-output").exists()
 
 
+@pytest.mark.parametrize(
+    ("config_constant", "config_text", "duplicate_key"),
+    (
+        (
+            "_PACK_CONFIG",
+            "pack: {}\npack: {}\ncooling: {}\n",
+            "pack",
+        ),
+        (
+            "_CONTROLLER_CONFIG",
+            "threshold_controller:\n  stages: []\n  stages: []\n",
+            "stages",
+        ),
+    ),
+)
+def test_duplicate_yaml_keys_fail_without_publishing_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    config_constant: str,
+    config_text: str,
+    duplicate_key: str,
+) -> None:
+    config_path = tmp_path / "malformed.yaml"
+    config_path.write_text(config_text, encoding="utf-8")
+    monkeypatch.setattr(benchmark_script, config_constant, config_path)
+    output = tmp_path / "benchmark-output"
+
+    status = benchmark_script.main(
+        [
+            "--quick",
+            "--comparison-directory",
+            str(tmp_path / "missing-comparison"),
+            "--output-directory",
+            str(output),
+        ]
+    )
+
+    stderr = capsys.readouterr().err
+    assert status == 2
+    assert f"duplicate YAML field: '{duplicate_key}'" in stderr
+    assert "Traceback" not in stderr
+    assert not output.exists()
+    assert "comparison directory" not in stderr
+
+
+def test_existing_output_is_rejected_before_duplicate_yaml_is_parsed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_path = tmp_path / "malformed.yaml"
+    config_path.write_text("pack: {}\npack: {}\n", encoding="utf-8")
+    monkeypatch.setattr(benchmark_script, "_PACK_CONFIG", config_path)
+    output = tmp_path / "existing-output"
+    output.mkdir()
+
+    status = benchmark_script.main(
+        [
+            "--quick",
+            "--comparison-directory",
+            str(tmp_path / "missing-comparison"),
+            "--output-directory",
+            str(output),
+        ]
+    )
+
+    stderr = capsys.readouterr().err
+    assert status == 2
+    assert "output directory already exists" in stderr
+    assert "duplicate YAML field" not in stderr
+    assert "Traceback" not in stderr
+    assert output.is_dir()
+
+
 def test_quick_matrix_is_reloadable_and_reproducible_with_supplied_models(
     tmp_path: Path,
 ) -> None:
@@ -240,8 +332,8 @@ def test_quick_matrix_is_reloadable_and_reproducible_with_supplied_models(
     second_manifest = json.loads((second_output / "manifest.json").read_text())
     assert first_manifest == second_manifest
     for cell in first_manifest["cells"]:
-        for artifact in ("metrics", "timeseries", "provenance"):
-            relative = cell["artifacts"][artifact]
+        for artifact_name in ("metrics", "timeseries", "provenance"):
+            relative = cell["artifacts"][artifact_name]
             assert (first_output / relative).read_bytes() == (
                 second_output / relative
             ).read_bytes()
@@ -254,9 +346,9 @@ def test_quick_matrix_is_reloadable_and_reproducible_with_supplied_models(
                 cell.model_provenance.comparison_provenance,
                 *cell.model_provenance.dataset_manifests,
             ):
-                artifact = first_output / reference.path
-                assert artifact.is_file()
-                assert hashlib.sha256(artifact.read_bytes()).hexdigest() == (
+                artifact_path = first_output / reference.path
+                assert artifact_path.is_file()
+                assert hashlib.sha256(artifact_path.read_bytes()).hexdigest() == (
                     reference.sha256
                 )
     comparison.rename(tmp_path / "comparison-removed")

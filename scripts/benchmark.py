@@ -119,11 +119,39 @@ def _exact_mapping(value: object, name: str, fields: set[str]) -> dict[str, Any]
     return cast(dict[str, Any], value)
 
 
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate keys in every mapping."""
+
+
+def _construct_unique_mapping(
+    loader: _UniqueKeySafeLoader, node: yaml.MappingNode, deep: bool = False
+) -> dict[object, object]:
+    loader.flatten_mapping(node)
+    result: dict[object, object] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            duplicate = key in result
+        except TypeError as error:
+            raise ValueError(
+                "configuration mapping keys must be scalar values"
+            ) from error
+        if duplicate:
+            raise ValueError(f"duplicate YAML field: {key!r}")
+        result[key] = loader.construct_object(value_node, deep=deep)
+    return result
+
+
+_UniqueKeySafeLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping
+)
+
+
 def _read_yaml(path: Path, label: str, fields: set[str]) -> dict[str, Any]:
     try:
         with path.open(encoding="utf-8") as stream:
-            value = yaml.safe_load(stream)
-    except (OSError, UnicodeError, yaml.YAMLError) as error:
+            value = yaml.load(stream, Loader=_UniqueKeySafeLoader)
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
         raise ValueError(f"could not load {label}: {error}") from error
     return _exact_mapping(value, label, fields)
 
