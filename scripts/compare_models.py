@@ -16,7 +16,10 @@ from typing import Any, cast
 import torch
 import yaml
 
-from thermotwin.data.physics_dataset import build_physics_datasets
+from thermotwin.data.physics_dataset import (
+    build_collocation_dataset,
+    build_physics_datasets,
+)
 from thermotwin.data.preprocessing import NormalizationStats
 from thermotwin.data.transition_artifacts import load_transition_artifacts
 from thermotwin.models.comparison import evaluate_physics_model
@@ -89,16 +92,22 @@ def _load_training_configs(
         top["physics_loss"], "physics_loss", {"standard", "smoke_test"}
     )
     physics_key = "smoke_test" if smoke_test else "standard"
-    configured = PhysicsLossConfig(
-        **_mapping(
-            physics_root[physics_key],
-            f"physics_loss.{physics_key}",
-            {"lambda_physics", "residual_scale_w"},
+    physics_values = physics_root[physics_key]
+    required = {"lambda_physics", "residual_scale_w"}
+    optional = {"collocation_samples_per_row", "collocation_max_current_a"}
+    if type(physics_values) is not dict or not (
+        required <= set(physics_values) <= required | optional
+    ):
+        raise ValueError(
+            f"physics_loss.{physics_key} must contain "
+            f"{', '.join(sorted(required))} and optionally "
+            f"{', '.join(sorted(optional))}"
         )
-    )
+    configured = PhysicsLossConfig(**physics_values)
     if configured.lambda_physics <= 0.0:
         raise ValueError("configured physics-informed lambda_physics must be positive")
-    data_only = replace(configured, lambda_physics=0.0)
+    # The data-only baseline uses no physics term and no collocation rows.
+    data_only = replace(configured, lambda_physics=0.0, collocation_samples_per_row=0)
     return model_config, trainer_config, data_only, configured
 
 
@@ -313,6 +322,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             ("data_only", data_loss_config),
             ("physics_informed", physics_loss_config),
         ):
+            collocation = (
+                build_collocation_dataset(
+                    id_artifacts,
+                    loss_config.collocation_samples_per_row,
+                    seed=trainer_config.seed,
+                    max_current_a=loss_config.collocation_max_current_a,
+                )
+                if loss_config.collocation_samples_per_row > 0
+                else None
+            )
             runs[label] = train_physics_aware_mlp(
                 model_config,
                 trainer_config,
@@ -321,6 +340,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 id_datasets.train,
                 id_datasets.validation,
                 output / f"{label}.pt",
+                collocation,
             )
 
         metrics = {

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Sized
+from collections.abc import Iterator, Sized
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from thermotwin.data.preprocessing import NormalizationStats
 from thermotwin.models.config import MLPConfig, PhysicsLossConfig, TrainerConfig
-from thermotwin.models.losses import combined_thermal_loss
+from thermotwin.models.losses import combined_thermal_loss, physics_residual_w
 from thermotwin.models.mlp import ThermalMLP
 
 _Batch: TypeAlias = tuple[Tensor, Tensor, Tensor]
@@ -151,6 +151,7 @@ def _mean_components(
     loss_config: PhysicsLossConfig,
     *,
     optimizer: Adam | None = None,
+    collocation: Iterator[_Batch] | None = None,
 ) -> tuple[float, float, float]:
     is_training = optimizer is not None
     model.train(is_training)
@@ -171,19 +172,32 @@ def _mean_components(
             components = combined_thermal_loss(
                 predictions, targets, contexts, normalization, loss_config
             )
+            total = components.total
+            if collocation is not None and loss_config.lambda_physics > 0.0:
+                # Unlabeled rows: only the energy-balance residual applies.
+                colloc_features, _, colloc_contexts = next(collocation)
+                residual = physics_residual_w(
+                    model(colloc_features.to(device)),
+                    colloc_contexts.to(device),
+                    normalization,
+                )
+                collocation_mse = torch.mean(
+                    torch.square(residual / loss_config.residual_scale_w)
+                )
+                total = total + loss_config.lambda_physics * collocation_mse
             for component in (
-                components.total,
+                total,
                 components.data_mse,
                 components.physics_mse,
             ):
                 if not torch.isfinite(component).item():
                     raise ValueError("training produced a nonfinite loss component")
             if optimizer is not None:
-                components.total.backward()  # type: ignore[no-untyped-call]
+                total.backward()  # type: ignore[no-untyped-call]
                 optimizer.step()
             count = int(features.shape[0])
             for index, component in enumerate(
-                (components.total, components.data_mse, components.physics_mse)
+                (total, components.data_mse, components.physics_mse)
             ):
                 totals[index] += float(component.detach().item()) * count
             sample_count += count
@@ -207,6 +221,7 @@ def train_physics_aware_mlp(
     train_dataset: Dataset[_Batch],
     validation_dataset: Dataset[_Batch],
     checkpoint_path: str | Path,
+    collocation_dataset: Dataset[_Batch] | None = None,
 ) -> PhysicsTrainingResult:
     """Train one MLP with the shared data plus weighted physics objective.
 
@@ -270,6 +285,22 @@ def train_physics_aware_mlp(
         shuffle=False,
         num_workers=0,
     )
+    collocation_stream: Iterator[_Batch] | None = None
+    if collocation_dataset is not None:
+        _validate_dataset(collocation_dataset, "collocation", widths)
+        collocation_batches = DataLoader(
+            collocation_dataset,
+            batch_size=trainer_config.batch_size,
+            shuffle=True,
+            generator=torch.Generator(device="cpu").manual_seed(torch_seed + 1),
+            num_workers=0,
+        )
+
+        def _cycle() -> Iterator[_Batch]:
+            while True:
+                yield from collocation_batches
+
+        collocation_stream = _cycle()
 
     best_loss = float("inf")
     best_epoch = 0
@@ -286,6 +317,7 @@ def train_physics_aware_mlp(
             stats,
             physics_loss_config,
             optimizer=optimizer,
+            collocation=collocation_stream,
         )
         validation_total, validation_data, validation_physics = _mean_components(
             model,

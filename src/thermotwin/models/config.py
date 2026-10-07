@@ -96,6 +96,10 @@ class PhysicsLossConfig:
 
     lambda_physics: float
     residual_scale_w: float
+    # Collocation: extra unlabeled rows per training row at which only the
+    # energy-balance residual is enforced (random current and coolant flow).
+    collocation_samples_per_row: int = 0
+    collocation_max_current_a: float = 320.0
 
     def __post_init__(self) -> None:
         weight = _finite_real("lambda_physics", self.lambda_physics)
@@ -107,3 +111,13 @@ class PhysicsLossConfig:
         if residual_scale <= 0.0:
             raise ValueError("residual_scale_w must be positive")
         object.__setattr__(self, "residual_scale_w", residual_scale)
+
+        samples = self.collocation_samples_per_row
+        if isinstance(samples, bool) or not isinstance(samples, int) or samples < 0:
+            raise ValueError("collocation_samples_per_row must be a nonnegative int")
+        max_current = _finite_real(
+            "collocation_max_current_a", self.collocation_max_current_a
+        )
+        if max_current <= 0.0:
+            raise ValueError("collocation_max_current_a must be positive")
+        object.__setattr__(self, "collocation_max_current_a", max_current)

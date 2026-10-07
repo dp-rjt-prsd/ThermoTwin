@@ -31,6 +31,11 @@ physics_loss:
   standard:
     lambda_physics: 0.1
     residual_scale_w: 10.0
+    # Optional collocation: unlabeled rows per training row where only the energy
+    # balance is enforced, at random current (0 to max) and random coolant flow.
+    # Off by default: in a sweep it did not improve out-of-distribution forecasts.
+    collocation_samples_per_row: 0
+    collocation_max_current_a: 320.0
   smoke_test:
     lambda_physics: 0.1
     residual_scale_w: 10.0

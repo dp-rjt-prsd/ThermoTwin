@@ -58,9 +58,17 @@ def _metadata_scale(record: TransitionRecord, name: str) -> float:
 
 
 def physics_context(
-    record: TransitionRecord, base_environment_config: EnvironmentConfig
+    record: TransitionRecord,
+    base_environment_config: EnvironmentConfig,
+    *,
+    current_a: float | None = None,
+    coolant_mass_flow_kg_s: float | None = None,
 ) -> NDArray[np.float64]:
-    """Build ``dt, thermal capacity, net heat per cell`` from authoritative physics."""
+    """Build ``dt, thermal capacity, net heat per cell`` from authoritative physics.
+
+    ``current_a`` and ``coolant_mass_flow_kg_s`` optionally replace the recorded
+    values, giving the energy balance at an unlabeled collocation point.
+    """
     if type(record) is not TransitionRecord:
         raise ValueError("record must be a TransitionRecord")
     if type(base_environment_config) is not EnvironmentConfig:
@@ -90,11 +98,17 @@ def physics_context(
         flow_heat_transfer_gain=base_cooling.flow_heat_transfer_gain * cooling_scale,
     )
 
-    generated_heat = joule_heating_w(state.current_a, state.cell_resistances_ohm)
+    current = state.current_a if current_a is None else float(current_a)
+    flow = (
+        record.action.coolant_mass_flow_kg_s
+        if coolant_mass_flow_kg_s is None
+        else float(coolant_mass_flow_kg_s)
+    )
+    generated_heat = joule_heating_w(current, state.cell_resistances_ohm)
     cooling_heat = cooling_heat_removal_w(
         state.cell_temperatures_k,
         state.coolant_inlet_temperature_k,
-        record.action.coolant_mass_flow_kg_s,
+        flow,
         pack.cell_cooling_surface_area_m2,
         sampled_cooling,
     )
@@ -265,6 +279,74 @@ def _split_dataset(
         source.targets,
         contexts,
         source.trajectory_ids,
+    )
+
+
+def build_collocation_dataset(
+    artifacts: TransitionArtifacts,
+    samples_per_row: int,
+    *,
+    seed: int,
+    max_current_a: float,
+) -> PhysicsTransitionDataset:
+    """Unlabeled physics-only rows built from the training split.
+
+    Each training state is copied ``samples_per_row`` times with a random pack
+    current in ``[0, max_current_a]`` and a random legal coolant flow. Only the
+    energy-balance residual is defined for these rows; their targets are zero
+    placeholders that the trainer never uses.
+    """
+    if type(artifacts) is not TransitionArtifacts:
+        raise ValueError("artifacts must be a TransitionArtifacts")
+    if isinstance(samples_per_row, bool) or not isinstance(samples_per_row, int):
+        raise ValueError("samples_per_row must be a positive integer")
+    if samples_per_row <= 0:
+        raise ValueError("samples_per_row must be a positive integer")
+    if not math.isfinite(max_current_a) or max_current_a <= 0.0:
+        raise ValueError("max_current_a must be positive and finite")
+    config = artifacts.base_environment_config
+    cooling = config.cooling
+    rng = np.random.default_rng(seed)
+    raw_features: list[list[float]] = []
+    contexts: list[NDArray[np.float64]] = []
+    for record in artifacts.train:
+        state = record.state
+        for _ in range(samples_per_row):
+            current = float(rng.uniform(0.0, max_current_a))
+            flow = float(
+                rng.uniform(
+                    cooling.minimum_coolant_mass_flow_kg_s,
+                    cooling.maximum_coolant_mass_flow_kg_s,
+                )
+            )
+            raw_features.append(
+                [
+                    current,
+                    state.soc_fraction,
+                    *state.cell_temperatures_k,
+                    state.ambient_temperature_k,
+                    state.coolant_inlet_temperature_k,
+                    flow,
+                ]
+            )
+            contexts.append(
+                physics_context(
+                    record,
+                    config,
+                    current_a=current,
+                    coolant_mass_flow_kg_s=flow,
+                )
+            )
+    normalization = artifacts.model_datasets.normalization
+    features = normalization.transform_features(
+        np.asarray(raw_features, dtype=np.float64)
+    ).astype(np.float32)
+    cell_count = artifacts.model_datasets.cell_count
+    return PhysicsTransitionDataset(
+        features,
+        np.zeros((features.shape[0], cell_count), dtype=np.float32),
+        np.stack(contexts).astype(np.float32),
+        artifacts.model_datasets.train.trajectory_ids,
     )
 
 
