@@ -275,7 +275,9 @@ def test_smoke_generation_persists_consistent_provenance_and_deterministic_files
         "neighbor_thermal_resistance_scale_range",
         "cooling_effectiveness_scale_range",
         "allowed_profile_names",
+        "coolant_flow_segment_s",
     }
+    assert provenance["sampling_config"]["coolant_flow_segment_s"] == 10.0
     assert provenance["sampling_config"]["duration_s"] == 10.0
     assert provenance["sampling_config"]["time_step_s"] == 1.0
     assert provenance["sampling_config"]["allowed_profile_names"] == [

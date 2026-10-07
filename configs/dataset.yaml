@@ -8,6 +8,8 @@ sampling:
   coolant_inlet_temperature_k_range: [285.0, 300.0]
   peak_current_a_range: [10.0, 250.0]
   coolant_mass_flow_kg_s_range: [0.0, 0.1]
+  # Resample coolant flow every 10 s so each run shows the effect of flow changes.
+  coolant_flow_segment_s: 10.0
   cell_resistance_scale_range: [0.8, 1.8]
   neighbor_thermal_resistance_scale_range: [0.7, 1.5]
   cooling_effectiveness_scale_range: [0.7, 1.4]

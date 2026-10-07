@@ -8,7 +8,11 @@ from numbers import Integral
 import numpy as np
 
 from thermotwin.core.types import EnvironmentConfig
-from thermotwin.data.types import DatasetSamplingConfig, DatasetScenario
+from thermotwin.data.types import (
+    CoolantFlowProfile,
+    DatasetSamplingConfig,
+    DatasetScenario,
+)
 from thermotwin.scenarios.charging import fast_charging_profile
 from thermotwin.scenarios.drive_cycles import (
     aggressive_drive_profile,
@@ -175,11 +179,30 @@ def sample_dataset_scenario(
     def constant_coolant_flow(_time_s: float) -> float:
         return coolant_flow
 
+    coolant_flow_profile: CoolantFlowProfile = constant_coolant_flow
+    segment = sampling_config.coolant_flow_segment_s
+    if segment is not None:
+        # Sampled after every other quantity so constant-flow scenarios keep the
+        # exact values they had before segmented flow existed.
+        segment_count = int(np.ceil(duration / segment))
+        segment_flows = (coolant_flow,) + tuple(
+            float(rng.uniform(flow_lower, flow_upper))
+            for _ in range(segment_count - 1)
+        )
+        metadata["coolant_flow_segment_s"] = segment
+        metadata["coolant_flow_segment_count"] = segment_count
+
+        def segmented_coolant_flow(time_s: float) -> float:
+            index = min(int(time_s // segment), segment_count - 1)
+            return segment_flows[max(index, 0)]
+
+        coolant_flow_profile = segmented_coolant_flow
+
     return DatasetScenario(
         trajectory_id=f"trajectory-{index_value:06d}",
         environment_config=sampled_environment,
         current_profile=current_profile,
-        coolant_flow_profile=constant_coolant_flow,
+        coolant_flow_profile=coolant_flow_profile,
         duration_s=duration,
         time_step_s=sampling_config.time_step_s,
         metadata=metadata,

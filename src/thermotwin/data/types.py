@@ -197,6 +197,9 @@ class DatasetSamplingConfig:
     neighbor_thermal_resistance_scale_range: tuple[float, float]
     cooling_effectiveness_scale_range: tuple[float, float]
     allowed_profile_names: tuple[str, ...]
+    # When set, coolant flow is resampled every segment so one trajectory contains
+    # several flows; None keeps one constant flow per trajectory.
+    coolant_flow_segment_s: float | None = None
 
     def __post_init__(self) -> None:
         duration = _positive_finite("duration_s", self.duration_s)
@@ -204,6 +207,12 @@ class DatasetSamplingConfig:
         _validate_step_multiple(duration, time_step)
         object.__setattr__(self, "duration_s", duration)
         object.__setattr__(self, "time_step_s", time_step)
+        if self.coolant_flow_segment_s is not None:
+            segment = _positive_finite(
+                "coolant_flow_segment_s", self.coolant_flow_segment_s
+            )
+            _validate_step_multiple(segment, time_step)
+            object.__setattr__(self, "coolant_flow_segment_s", segment)
 
         range_names = (
             "initial_soc_fraction_range",
