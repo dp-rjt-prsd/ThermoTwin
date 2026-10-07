@@ -331,11 +331,12 @@ Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of
   - Verify: `python -m pytest tests/test_dashboard.py tests/test_visualization_plots.py`; documented headless dashboard health check.
   - Dependencies: TASK-63.
   - Accepted: the measured heatmap uses the shared threshold source; provenance is visible; detector events alone drive the operator panel; injected truth is evaluation-only; labels have high-contrast backgrounds and all cell traces have non-color cues. Verification passed with 21 tests, Ruff, strict mypy, and a fresh HTTP 200 `ok` dashboard health check.
-- [ ] TASK-65 Define immutable benchmark/result contracts.
+- [x] TASK-65 Define immutable benchmark/result contracts.
   - Scope: `src/thermotwin/experiments/benchmark_types.py`; `tests/test_benchmark_types.py`.
   - Acceptance: contracts validate scenario/variant identity, seed, model and dataset provenance, training mode, persistence assumptions, controller/forecast/physics/fault metrics, finite values, and matrix uniqueness; full mode rejects smoke-trained model artifacts.
   - Verify: `python -m pytest tests/test_benchmark_types.py`.
   - Dependencies: TASK-64.
+  - Accepted: frozen contracts cover the 6x4 matrix, artifact/model provenance, no-future-truth assumptions, controller/model/forecast/physics/fault metrics, and full-mode smoke rejection. Review aligned distribution labels with saved artifacts and tightened detector/thermal invariants. Verification passed with 32 tests, Ruff, and strict mypy.
 - [ ] TASK-66 Implement deterministic six-scenario configuration and factory.
   - Scope: `configs/benchmark.yaml`; `src/thermotwin/scenarios/benchmark.py`; `tests/test_benchmark_scenarios.py`.
   - Acceptance: normal, high-current, hot-ambient, weak-cooling, fast-charging, and resistance-fault scenarios are reproducible and valid; weak cooling reduces legal flow capacity only; one immutable scenario is shared by all variants.
