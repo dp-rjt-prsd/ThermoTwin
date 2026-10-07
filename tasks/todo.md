@@ -313,11 +313,12 @@ Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of
   - Verify: `python -m pytest tests/test_forecast_script.py`.
   - Dependencies: TASK-60.
   - Accepted: regression first reproduced the uncaught `IndexError`; the guard now rejects an empty test split before indexing. Focused verification passed with 5 tests, Ruff, and strict mypy.
-- [ ] TASK-62 Freeze a common-source/common-action forecast snapshot contract.
+- [x] TASK-62 Freeze a common-source/common-action forecast snapshot contract.
   - Scope: `scripts/run_predictive.py`; `tests/test_predictive_experiment.py`.
   - Acceptance: both model variants use and persist the exact same identified measured source state/time and legal action for all required horizons; mismatches are rejected.
   - Verify: `python -m pytest tests/test_predictive_experiment.py`.
   - Dependencies: TASK-61.
+  - Accepted: schema version 2 stores one threshold-run terminal source and action for both twins; distinct predictive terminal states are covered by regression tests. Focused verification passed with 6 tests, Ruff, and strict mypy.
 - [ ] TASK-63 Enforce dashboard source pairing.
   - Scope: `src/thermotwin/visualization/predictive_data.py`; `src/thermotwin/visualization/contracts.py`; `tests/test_dashboard_data.py`.
   - Acceptance: loading rejects cross-model source/action mismatches and exposes one immutable common source so a model prediction cannot be paired with an unrelated controller terminal state.

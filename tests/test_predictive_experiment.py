@@ -7,12 +7,87 @@ import json
 import math
 import subprocess
 import sys
+from importlib import import_module
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
+import numpy as np
 import pytest
+
+from thermotwin.core import CoolingAction
+
+_forecast_snapshots = cast(
+    Any, import_module("scripts.run_predictive")._forecast_snapshots
+)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = _PROJECT_ROOT / "scripts" / "run_predictive.py"
+
+
+class _RecordingForecaster:
+    cell_count = 12
+    time_step_s = 1.0
+
+    def __init__(self) -> None:
+        self.inputs: list[tuple[object, tuple[CoolingAction, ...]]] = []
+
+    def rollout(
+        self, initial_state: object, actions: tuple[CoolingAction, ...]
+    ) -> object:
+        self.inputs.append((initial_state, actions))
+        temperatures = np.full((len(actions), self.cell_count), 301.0)
+        return SimpleNamespace(cell_temperatures_k=temperatures)
+
+
+def test_forecast_variants_share_threshold_terminal_state_and_action() -> None:
+    threshold_state = SimpleNamespace(
+        time_s=120.0,
+        cell_temperatures_k=np.full(12, 300.0),
+        coolant_mass_flow_kg_s=0.004,
+    )
+    data_only_state = SimpleNamespace(
+        time_s=120.0,
+        cell_temperatures_k=np.full(12, 310.0),
+        coolant_mass_flow_kg_s=0.008,
+    )
+    physics_informed_state = SimpleNamespace(
+        time_s=120.0,
+        cell_temperatures_k=np.full(12, 320.0),
+        coolant_mass_flow_kg_s=0.012,
+    )
+    results = {
+        run_id: SimpleNamespace(records=(SimpleNamespace(state=state),))
+        for run_id, state in (
+            ("threshold", threshold_state),
+            ("predictive_data_only", data_only_state),
+            ("predictive_physics_informed", physics_informed_state),
+        )
+    }
+    data_forecaster = _RecordingForecaster()
+    physics_forecaster = _RecordingForecaster()
+
+    snapshots = _forecast_snapshots(
+        results,
+        {"data_only": data_forecaster, "physics_informed": physics_forecaster},
+        rows=3,
+        columns=4,
+    )
+
+    assert snapshots["source_run_id"] == "threshold"
+    assert snapshots["source"] == {
+        "measured_time_s": 120.0,
+        "cell_temperatures_k": [300.0] * 12,
+    }
+    assert snapshots["action_coolant_mass_flow_kg_s"] == 0.004
+    assert data_forecaster.inputs
+    assert physics_forecaster.inputs
+    for forecaster in (data_forecaster, physics_forecaster):
+        assert all(state is threshold_state for state, _actions in forecaster.inputs)
+        assert all(
+            all(action.coolant_mass_flow_kg_s == 0.004 for action in actions)
+            for _state, actions in forecaster.inputs
+        )
 
 
 def _run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -79,25 +154,47 @@ def test_smoke_comparison_saves_four_fair_runs_and_measured_summary(
     assert summary["forecast_snapshots_path"] == "forecast_snapshots.json"
     forecast_bytes = forecast_path.read_bytes()
     snapshots = json.loads(forecast_bytes)
-    assert set(snapshots) == {"schema_version", "pack", "horizons_s", "variants"}
-    assert snapshots["schema_version"] == 1
+    assert set(snapshots) == {
+        "schema_version",
+        "pack",
+        "horizons_s",
+        "source_run_id",
+        "source",
+        "action_coolant_mass_flow_kg_s",
+        "variants",
+    }
+    assert snapshots["schema_version"] == 2
     assert snapshots["pack"] == {"rows": 3, "columns": 4}
     assert snapshots["horizons_s"] == [30, 60, 120]
+    assert snapshots["source_run_id"] == "threshold"
     assert set(snapshots["variants"]) == {"data_only", "physics_informed"}
 
-    for variant, run_id in (
-        ("data_only", "predictive_data_only"),
-        ("physics_informed", "predictive_physics_informed"),
-    ):
+    source = snapshots["source"]
+    assert set(source) == {"measured_time_s", "cell_temperatures_k"}
+    assert math.isfinite(source["measured_time_s"])
+    action_flow = snapshots["action_coolant_mass_flow_kg_s"]
+    assert math.isfinite(action_flow)
+    assert source["measured_time_s"] == summary["scenario"]["duration_s"]
+    threshold_directory = output / summary["runs"]["threshold"]["artifact_path"]
+    with (threshold_directory / "timeseries.csv").open(
+        encoding="utf-8", newline=""
+    ) as stream:
+        threshold_rows = list(csv.DictReader(stream))
+    threshold_final = threshold_rows[-1]
+    assert source["measured_time_s"] == float(threshold_final["time_s"])
+    assert source["cell_temperatures_k"] == [
+        float(threshold_final[f"cell_temperature_{index}_k"]) for index in range(12)
+    ]
+    assert action_flow == float(threshold_final["coolant_mass_flow_kg_s"])
+    assert len(source["cell_temperatures_k"]) == 12
+    assert all(
+        math.isfinite(value) and value > 0.0
+        for value in source["cell_temperatures_k"]
+    )
+
+    for variant in ("data_only", "physics_informed"):
         snapshot_variant = snapshots["variants"][variant]
-        assert set(snapshot_variant) == {
-            "source",
-            "action_coolant_mass_flow_kg_s",
-            "predictions",
-        }
-        source = snapshot_variant["source"]
-        assert set(source) == {"measured_time_s", "cell_temperatures_k"}
-        assert math.isfinite(source["measured_time_s"])
+        assert set(snapshot_variant) == {"predictions"}
         predictions = snapshot_variant["predictions"]
         assert len(predictions) == 3
         assert [prediction["horizon_s"] for prediction in predictions] == [30, 60, 120]
@@ -106,24 +203,6 @@ def test_smoke_comparison_saves_four_fair_runs_and_measured_summary(
             for prediction in predictions
         )
 
-        run_directory = output / summary["runs"][run_id]["artifact_path"]
-        with (run_directory / "timeseries.csv").open(
-            encoding="utf-8", newline=""
-        ) as stream:
-            measured_rows = list(csv.DictReader(stream))
-        final_row = measured_rows[-1]
-        assert source["measured_time_s"] == float(final_row["time_s"])
-        assert source["cell_temperatures_k"] == [
-            float(final_row[f"cell_temperature_{index}_k"]) for index in range(12)
-        ]
-        assert snapshot_variant["action_coolant_mass_flow_kg_s"] == float(
-            final_row["coolant_mass_flow_kg_s"]
-        )
-        assert len(source["cell_temperatures_k"]) == 12
-        assert all(
-            math.isfinite(value) and value > 0.0
-            for value in source["cell_temperatures_k"]
-        )
         for prediction in predictions:
             temperatures = prediction["cell_temperatures_k"]
             assert len(temperatures) == 12

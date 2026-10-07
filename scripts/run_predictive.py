@@ -338,33 +338,61 @@ def _forecast_snapshots(
     rows: int,
     columns: int,
 ) -> dict[str, object]:
-    """Build post-run forecasts using only each run's final measured state."""
-    expected_cell_count = rows * columns
-    variants: dict[str, object] = {}
-    for variant, run_id in (
-        ("data_only", "predictive_data_only"),
-        ("physics_informed", "predictive_physics_informed"),
+    """Compare both twins from the same measured threshold-controller state."""
+    if (
+        isinstance(rows, bool)
+        or not isinstance(rows, int)
+        or rows <= 0
+        or isinstance(columns, bool)
+        or not isinstance(columns, int)
+        or columns <= 0
     ):
-        result = results[run_id]
+        raise ValueError("configured pack rows and columns must be positive integers")
+    expected_cell_count = rows * columns
+
+    if "threshold" not in results or not results["threshold"].records:
+        raise ValueError("threshold run must contain at least one measured record")
+    source_state = results["threshold"].records[-1].state
+    source_temperatures = [float(value) for value in source_state.cell_temperatures_k]
+    if source_state.cell_temperatures_k.shape != (expected_cell_count,):
+        raise ValueError("measured source state does not match configured pack size")
+    if not all(
+        math.isfinite(value) and value > 0.0 for value in source_temperatures
+    ):
+        raise ValueError("measured source temperatures must be finite and positive")
+    measured_time_s = float(source_state.time_s)
+    if not math.isfinite(measured_time_s):
+        raise ValueError("measured source time must be finite")
+
+    action_flow = float(source_state.coolant_mass_flow_kg_s)
+    if not math.isfinite(action_flow):
+        raise ValueError("shared coolant flow must be finite")
+    action = CoolingAction(action_flow)
+    source: dict[str, object] = {
+        "measured_time_s": measured_time_s,
+        "cell_temperatures_k": source_temperatures,
+    }
+    variants: dict[str, object] = {}
+    for variant in ("data_only", "physics_informed"):
         forecaster = forecasters[variant]
-        source_state = result.records[-1].state
-        if source_state.cell_temperatures_k.shape != (expected_cell_count,):
-            raise ValueError(
-                "measured source state does not match configured pack size"
-            )
         if forecaster.cell_count != expected_cell_count:
             raise ValueError(
                 "forecaster cell count does not match configured pack size"
             )
-
-        action_flow = float(source_state.coolant_mass_flow_kg_s)
-        action = CoolingAction(action_flow)
+        time_step_s = float(forecaster.time_step_s)
+        if not math.isfinite(time_step_s) or time_step_s <= 0.0:
+            raise ValueError("forecaster timestep must be finite and positive")
         predictions: list[dict[str, object]] = []
         for horizon_s in _FORECAST_HORIZONS_S:
-            step_count = round(horizon_s / forecaster.time_step_s)
+            raw_step_count = horizon_s / time_step_s
+            if not math.isfinite(raw_step_count):
+                raise ValueError(
+                    f"forecast horizon {horizon_s}s is not an exact timestep multiple"
+                )
+            step_count = round(raw_step_count)
             if step_count <= 0 or not math.isclose(
                 horizon_s,
-                step_count * forecaster.time_step_s,
+                step_count * time_step_s,
                 rel_tol=1e-12,
                 abs_tol=1e-12,
             ):
@@ -392,25 +420,14 @@ def _forecast_snapshots(
                 }
             )
 
-        source_temperatures = [
-            float(value) for value in source_state.cell_temperatures_k
-        ]
-        if not all(
-            math.isfinite(value) and value > 0.0 for value in source_temperatures
-        ):
-            raise ValueError("measured source temperatures must be finite and positive")
-        variants[variant] = {
-            "source": {
-                "measured_time_s": float(source_state.time_s),
-                "cell_temperatures_k": source_temperatures,
-            },
-            "action_coolant_mass_flow_kg_s": action_flow,
-            "predictions": predictions,
-        }
+        variants[variant] = {"predictions": predictions}
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "pack": {"rows": rows, "columns": columns},
         "horizons_s": list(_FORECAST_HORIZONS_S),
+        "source_run_id": "threshold",
+        "source": source,
+        "action_coolant_mass_flow_kg_s": action_flow,
         "variants": variants,
     }
 
