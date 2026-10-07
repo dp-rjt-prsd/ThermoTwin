@@ -302,3 +302,80 @@
   - Dependencies: TASK-59.
 - [x] Checkpoint P11: predictive control, fault diagnostics, and artifact-driven dashboard accepted for benchmark-suite work.
   - Next: Phase 12 benchmark suite; quantitative superiority has not yet been demonstrated.
+
+## Phase 12
+
+Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of CI coverage, statistical significance, production safety, or generalization beyond the configured synthetic runs. Threshold is the primary reactive baseline and PID is supplemental. Every scenario must run threshold, PID, predictive/data-only, and predictive/physics-informed variants from the identical scenario. Predictive control must disclose exogenous persistence and must not consume future simulator truth.
+
+- [ ] TASK-61 Fix the empty forecast-evaluation split regression.
+  - Scope: `scripts/evaluate_forecasts.py`; `tests/test_forecast_script.py`.
+  - Acceptance: an empty test split fails before indexing with a concise actionable CLI error, while valid evaluation and non-overwrite behavior remain unchanged.
+  - Verify: `python -m pytest tests/test_forecast_script.py`.
+  - Dependencies: TASK-60.
+- [ ] TASK-62 Freeze a common-source/common-action forecast snapshot contract.
+  - Scope: `scripts/run_predictive.py`; `tests/test_predictive_experiment.py`.
+  - Acceptance: both model variants use and persist the exact same identified measured source state/time and legal action for all required horizons; mismatches are rejected.
+  - Verify: `python -m pytest tests/test_predictive_experiment.py`.
+  - Dependencies: TASK-61.
+- [ ] TASK-63 Enforce dashboard source pairing.
+  - Scope: `src/thermotwin/visualization/predictive_data.py`; `src/thermotwin/visualization/contracts.py`; `tests/test_dashboard_data.py`.
+  - Acceptance: loading rejects cross-model source/action mismatches and exposes one immutable common source so a model prediction cannot be paired with an unrelated controller terminal state.
+  - Verify: `python -m pytest tests/test_dashboard_data.py`.
+  - Dependencies: TASK-62.
+- [ ] TASK-64 Repair dashboard accessibility and hidden-truth separation.
+  - Scope: `src/thermotwin/visualization/dashboard.py`; `src/thermotwin/visualization/plots.py`; `tests/test_dashboard.py`; `tests/test_visualization_plots.py`.
+  - Acceptance: measured and predicted heatmaps share saved source provenance; accessible labels and non-color cues are present; operator-facing suspected-cell output comes only from detector evidence or says unavailable; configured fault truth is isolated as evaluation-only.
+  - Verify: `python -m pytest tests/test_dashboard.py tests/test_visualization_plots.py`; documented headless dashboard health check.
+  - Dependencies: TASK-63.
+- [ ] TASK-65 Define immutable benchmark/result contracts.
+  - Scope: `src/thermotwin/experiments/benchmark_types.py`; `tests/test_benchmark_types.py`.
+  - Acceptance: contracts validate scenario/variant identity, seed, model and dataset provenance, training mode, persistence assumptions, controller/forecast/physics/fault metrics, finite values, and matrix uniqueness; full mode rejects smoke-trained model artifacts.
+  - Verify: `python -m pytest tests/test_benchmark_types.py`.
+  - Dependencies: TASK-64.
+- [ ] TASK-66 Implement deterministic six-scenario configuration and factory.
+  - Scope: `configs/benchmark.yaml`; `src/thermotwin/scenarios/benchmark.py`; `tests/test_benchmark_scenarios.py`.
+  - Acceptance: normal, high-current, hot-ambient, weak-cooling, fast-charging, and resistance-fault scenarios are reproducible and valid; weak cooling reduces legal flow capacity only; one immutable scenario is shared by all variants.
+  - Verify: `python -m pytest tests/test_benchmark_scenarios.py`.
+  - Dependencies: TASK-65.
+- [ ] TASK-67 Implement the four-variant controller factory and leakage regression.
+  - Scope: `src/thermotwin/experiments/benchmark_controllers.py`; `tests/test_benchmark_controllers.py`.
+  - Acceptance: threshold primary, PID supplemental, predictive/data-only, and predictive/physics-informed variants receive identical public state/scenario inputs; predictive variants use disclosed persistence through the forecaster and receive no future truth or fault label.
+  - Verify: `python -m pytest tests/test_benchmark_controllers.py`.
+  - Dependencies: TASK-65.
+- [ ] Checkpoint P12A: stabilization and benchmark contracts accepted before suite execution.
+  - Acceptance: TASK-61 through TASK-67 focused tests, Ruff, strict mypy, and diff review pass; the two disjoint TASK-66/TASK-67 scopes are integrated without contract drift.
+  - Verify: focused tests above; `python -m ruff check .`; `python -m mypy src tests scripts`.
+  - Dependencies: TASK-66, TASK-67.
+- [ ] TASK-68 Execute and persist the full 6-by-4 benchmark matrix.
+  - Scope: `src/thermotwin/experiments/benchmark.py`; `src/thermotwin/experiments/benchmark_serialization.py`; `tests/test_benchmark.py`; `tests/test_benchmark_serialization.py`.
+  - Acceptance: all four variants run each identical scenario/seed/state/configuration; non-overwriting artifacts retain traces, metrics, identity, configuration, seed, model/dataset/checkpoint provenance, and completeness state; partial output cannot appear complete.
+  - Verify: `python -m pytest tests/test_benchmark.py tests/test_benchmark_serialization.py`.
+  - Dependencies: TASK-66, TASK-67, Checkpoint P12A.
+- [ ] TASK-69 Add quick/full benchmark CLI workflows.
+  - Scope: `scripts/benchmark.py`; `tests/test_benchmark_script.py`.
+  - Acceptance: quick mode runs the full 6-by-4 matrix and labels it workflow-only; full mode requires validated non-smoke model provenance; malformed/missing paths, empty data, incompatibility, and existing outputs produce concise actionable stderr without traceback.
+  - Verify: `python -m pytest tests/test_benchmark_script.py`; `python scripts/benchmark.py --quick --output <new-temporary-directory>`.
+  - Dependencies: TASK-68.
+- [ ] Checkpoint P12B: benchmark execution and persistence accepted.
+  - Acceptance: a fresh quick matrix has 24 complete, deterministic, reloadable, provenance-valid cells and full mode demonstrably rejects smoke-trained artifacts.
+  - Verify: rerun TASK-69 verification against fresh temporary outputs and compare manifests/metrics.
+  - Dependencies: TASK-69.
+- [ ] TASK-70 Aggregate final evaluation artifacts.
+  - Scope: `src/thermotwin/experiments/final_evaluation.py`; `tests/test_final_evaluation.py`.
+  - Acceptance: saved-only aggregation reports ID/OOD MAE/RMSE/max error, 30/60/120-second errors, physics residual, controller peak/mean/spread, pump energy, safety count/duration, and fault lead time; incomplete/incompatible evidence fails; conclusions stay descriptive unless results support more.
+  - Verify: `python -m pytest tests/test_final_evaluation.py`.
+  - Dependencies: TASK-69, Checkpoint P12B.
+- [ ] TASK-71 Generate accessible presentation figures from saved evaluation data.
+  - Scope: `src/thermotwin/visualization/benchmark_plots.py`; `tests/test_benchmark_plots.py`.
+  - Acceptance: figures cover controller matrix, ID/OOD/horizon errors, physics residual, thermal-energy tradeoffs, and fault timing with visible units, identities, evidence mode, and non-color cues; no hidden input or fabricated number is used.
+  - Verify: `python -m pytest tests/test_benchmark_plots.py`.
+  - Dependencies: TASK-70.
+- [ ] TASK-72 Perform the actual-user/browser/release audit and documentation reconciliation.
+  - Scope: `README.md`; `PLAN.md`; `tasks/plan.md`; `tasks/todo.md`; `scripts/benchmark.py`; `tests/test_benchmark_script.py`; `src/thermotwin/visualization/dashboard.py`; `tests/test_dashboard.py`. Any defect outside this sequential scope requires a separately whitelisted repair task.
+  - Acceptance: clean setup-to-quick-benchmark-to-dashboard instructions work; browser/AppTest inspection covers all required views, responsive/accessibility behavior, console health, source pairing, and hidden-truth separation; CLI errors are actionable and traceback-free; full pytest/Ruff/mypy, deterministic runs, non-overwrite/provenance checks, artifact numbers, architecture, and claims are audited; docs disclose persistence and descriptive synthetic limitations.
+  - Verify: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests scripts`; all documented smoke/quick commands; dashboard health and browser/AppTest journey; `git diff --check`.
+  - Dependencies: TASK-71.
+- [ ] Checkpoint P12C: final release audit accepted.
+  - Acceptance: all Phase 12 jobs are accepted, the actual-user journey and full gates pass, fresh saved outputs support every published number, and no critical defect or unsupported claim remains.
+  - Verify: repeat TASK-72 verification from a clean artifact directory and review the final diff/evidence bundle.
+  - Dependencies: TASK-72.

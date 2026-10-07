@@ -1,8 +1,8 @@
-# Implementation Plan: ThermoTwin Phases 0-11
+# Implementation Plan: ThermoTwin Phases 0-12
 
 ## Overview
 
-This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, model-agnostic multi-step forecast engine, predictive cooling, simulator-owned resistance faults, and artifact-driven dashboard for Phases 0-11. The TASK-60 integration audit and Checkpoint P11 are accepted. Phase 12 benchmark-suite work is next; quantitative superiority has not yet been demonstrated. `AGENTS.md` is authoritative where project documents conflict.
+This plan records the implemented foundation through the reproducible baseline-controller experiment, leakage-safe synthetic transition dataset, data-only and physics-informed thermal surrogates, model-agnostic multi-step forecast engine, predictive cooling, simulator-owned resistance faults, and artifact-driven dashboard for Phases 0-11. The TASK-60 integration audit and Checkpoint P11 are accepted. Phase 12 is the planned benchmark and final-evaluation program; quantitative superiority has not yet been demonstrated. `AGENTS.md` is authoritative where project documents conflict.
 
 ## Frozen Architecture Decisions
 
@@ -35,6 +35,11 @@ This plan records the implemented foundation through the reproducible baseline-c
 - Resistance faults are immutable simulator configuration. The environment applies them at a configured cell and start time; controllers and anomaly detectors receive no fault label.
 - Anomaly detection compares measured temperatures with one-step forecasts, requires persistence across samples, and records detection cell, score, time, predicted hotspot, and severity.
 - Dashboard code consumes validated saved artifacts through visualization-layer loaders and contains no simulator or training logic.
+- Phase 12 uses a deterministic six-scenario suite as a descriptive prototype evaluation. It does not establish statistical significance, CI coverage, real-world safety, or generalization beyond the configured synthetic scenarios.
+- The threshold controller is the primary reactive baseline; PID is supplemental. Every scenario also runs predictive control with both the data-only and physics-informed twins against the identical scenario definition, seed, initial state, and simulator configuration.
+- Weak cooling changes only the legal coolant-flow capacity; it does not secretly change thermal physics, controller weights, or any one variant's inputs.
+- Full benchmark runs accept only validated, non-smoke model artifacts with recorded dataset, checkpoint, normalization, training-mode, seed, and configuration provenance. Quick mode remains workflow evidence only.
+- Predictive benchmark rollouts disclose their persistence assumption for unknown future current, ambient temperature, coolant-inlet temperature, SOC inputs, and actions. No controller receives future simulator truth.
 
 ## Dependency DAG
 
@@ -91,6 +96,11 @@ TASK-00 repository bootstrap
                                                                                                                                                                                                                           +-> TASK-50 predictive objective -> TASK-51 predictive controller -> TASK-55 predictive comparison
                                                                                                                                                                                                                           +-> TASK-52 simulator fault integration -> TASK-53 persistent anomaly detection -> TASK-54 lead-time metric -> TASK-56 fault workflow
                                                                                                                                                                                                                                                                             TASK-55 + TASK-56 -> TASK-57 dashboard artifact model -> TASK-58 plots -> TASK-59 Streamlit dashboard -> TASK-60 Phase 9-11 audit
+                                                                                                                                                                                                                                                                                                                                                                                                    |
+                                                                                                                                                                                                                                                                                                                                                                                                    v
+TASK-61 empty-split regression -> TASK-62 common snapshot contract -> TASK-63 dashboard source pairing -> TASK-64 accessibility/truth separation -> TASK-65 benchmark contracts
+                                                                                                                                                                                     TASK-65 -> TASK-66 six scenarios --+
+                                                                                                                                                                                     TASK-65 -> TASK-67 controller factory +--> TASK-68 suite execution/persistence -> TASK-69 benchmark CLI -> TASK-70 final aggregation -> TASK-71 presentation figures -> TASK-72 release audit/docs
 ```
 
 Tasks with disjoint files may run concurrently only after their shared dependency is accepted. No concurrent task may modify the same file.
@@ -216,6 +226,74 @@ Phase 9-10 completion evidence: 1,220 pytest tests passed; Ruff and strict mypy 
 
 Phase 9-11 integration audit evidence (TASK-60): full pytest passed with 1,265 tests in 373.04 s; full Ruff passed; strict mypy passed for 120 source files; fresh predictive and fault smoke workflows passed. The strict artifact loader accepted four controller traces, two model forecast sets, and a 30-step fault trace with a saved 11 s lead. The documented dashboard launcher health check returned HTTP 200 with `ok`. The predictive smoke again produced identical metrics and zero cooling across all four variants, so it demonstrates workflow integrity only and does not establish controller superiority. The fault smoke measured detection at 15 s, threshold crossing at 26 s, 11 s lead, and peak temperature of 317.12793572865644 K. No controller or model superiority is demonstrated by this audit. The dashboard health path reads saved artifacts without starting simulation or training.
 
+### Phase 12: Benchmark Suite and Final Evaluation
+
+Phase 12 begins with confirmed evidence and user-facing defect repairs. The benchmark must not be used to bury known errors under new aggregation. All tasks are sequential unless the DAG explicitly shows disjoint branches, and every implementation handoff must retain the file whitelist below.
+
+- TASK-61: Fix the empty forecast-evaluation split regression before indexing a transition.
+  - Likely file scope: `scripts/evaluate_forecasts.py`; `tests/test_forecast_script.py`.
+  - Acceptance: an empty test split produces a stable, actionable CLI error without `IndexError`; nonempty behavior and non-overwrite guarantees remain unchanged.
+  - Verification: `python -m pytest tests/test_forecast_script.py`.
+  - Dependencies: TASK-60.
+- TASK-62: Freeze a common-source/common-action forecast snapshot contract.
+  - Likely file scope: `scripts/run_predictive.py`; `tests/test_predictive_experiment.py`.
+  - Acceptance: data-only and physics-informed snapshots use the exact same explicitly identified measured source state, source time, and legal coolant action at every 30/60/120-second horizon; serialization validates and records that common provenance instead of pairing each twin with its own closed-loop terminal state.
+  - Verification: `python -m pytest tests/test_predictive_experiment.py`.
+  - Dependencies: TASK-61.
+- TASK-63: Pair dashboard measured and predicted heatmaps to the same saved source.
+  - Likely file scope: `src/thermotwin/visualization/predictive_data.py`; `src/thermotwin/visualization/contracts.py`; `tests/test_dashboard_data.py`.
+  - Acceptance: artifact loading rejects cross-model source/action mismatches, exposes the shared source as immutable view data, and prevents the UI from comparing a selected controller's unrelated final state with a model forecast.
+  - Verification: `python -m pytest tests/test_dashboard_data.py`.
+  - Dependencies: TASK-62.
+- TASK-64: Repair dashboard accessibility and separate inference output from hidden fault truth.
+  - Likely file scope: `src/thermotwin/visualization/dashboard.py`; `src/thermotwin/visualization/plots.py`; `tests/test_dashboard.py`; `tests/test_visualization_plots.py`.
+  - Acceptance: the measured heatmap is the selected forecast's shared source; labels state source/action/horizon provenance; plots and controls have meaningful accessible labels and do not depend on color alone; the operator-facing suspected-cell panel shows detector output or unavailable, never the configured fault cell as a substitute; configured fault truth is isolated and explicitly labeled as evaluation-only where needed.
+  - Verification: `python -m pytest tests/test_dashboard.py tests/test_visualization_plots.py`; run the documented headless dashboard health check.
+  - Dependencies: TASK-63.
+- TASK-65: Define immutable benchmark and result contracts.
+  - Likely file scope: `src/thermotwin/experiments/benchmark_types.py`; `tests/test_benchmark_types.py`.
+  - Acceptance: contracts validate scenario identity, seed, variant identity, model/dataset/checkpoint provenance, smoke/full training mode, persistence assumptions, controller metrics, forecast metrics, physics residuals, and optional fault lead time; invalid/missing/nonfinite values and duplicate matrix cells fail clearly; full-mode inputs reject smoke-trained models.
+  - Verification: `python -m pytest tests/test_benchmark_types.py`.
+  - Dependencies: TASK-64.
+- TASK-66: Implement the deterministic six-scenario factory and configuration.
+  - Likely file scope: `configs/benchmark.yaml`; `src/thermotwin/scenarios/benchmark.py`; `tests/test_benchmark_scenarios.py`.
+  - Acceptance: normal operation, high current, hot ambient, weak cooling, fast charging, and cell-resistance fault scenarios are deterministic and physically valid; weak cooling changes only legal flow capacity; a scenario is constructed once and reused unchanged by all four variants.
+  - Verification: `python -m pytest tests/test_benchmark_scenarios.py`.
+  - Dependencies: TASK-65.
+- TASK-67: Implement the four-variant controller factory and leakage regression tests.
+  - Likely file scope: `src/thermotwin/experiments/benchmark_controllers.py`; `tests/test_benchmark_controllers.py`.
+  - Acceptance: the matrix contains threshold as the primary reactive baseline, PID as supplemental, predictive plus data-only twin, and predictive plus physics-informed twin; all receive the same public state and scenario while predictive variants use only their forecaster and disclosed future-exogenous persistence, never simulator truth or fault labels.
+  - Verification: `python -m pytest tests/test_benchmark_controllers.py`.
+  - Dependencies: TASK-65.
+- Checkpoint P12A: TASK-61 through TASK-67 focused tests, Ruff, strict mypy, and diff review pass; confirmed evidence/UI defects and all benchmark contracts are accepted before suite execution.
+- TASK-68: Execute and persist the complete scenario/variant matrix.
+  - Likely file scope: `src/thermotwin/experiments/benchmark.py`; `src/thermotwin/experiments/benchmark_serialization.py`; `tests/test_benchmark.py`; `tests/test_benchmark_serialization.py`.
+  - Acceptance: every one of the six scenarios runs all four variants from the identical scenario, seed, initial state, duration, timestep, limits, and simulator parameters; each cell persists non-overwriting trace, metrics, controller/model identity, configuration, seed, and provenance; interruption or an incomplete matrix cannot masquerade as a complete suite.
+  - Verification: `python -m pytest tests/test_benchmark.py tests/test_benchmark_serialization.py`.
+  - Dependencies: TASK-66, TASK-67, Checkpoint P12A.
+- TASK-69: Add benchmark CLI quick/full workflows with user-grade error handling.
+  - Likely file scope: `scripts/benchmark.py`; `tests/test_benchmark_script.py`.
+  - Acceptance: `--quick` deterministically exercises all six scenarios and four variants but is labeled workflow-only evidence; full mode requires validated non-smoke model artifacts and rejects missing/incompatible provenance; invalid paths, empty splits, existing outputs, and malformed artifacts return concise actionable stderr without a traceback.
+  - Verification: `python -m pytest tests/test_benchmark_script.py`; `python scripts/benchmark.py --quick --output <new-temporary-directory>`.
+  - Dependencies: TASK-68.
+- Checkpoint P12B: a fresh quick 6-by-4 matrix is complete, deterministic, reloadable, and provenance-valid; full-mode smoke-artifact rejection is demonstrated before final aggregation.
+- TASK-70: Aggregate the saved final evaluation without unsupported claims.
+  - Likely file scope: `src/thermotwin/experiments/final_evaluation.py`; `tests/test_final_evaluation.py`.
+  - Acceptance: aggregation reports model ID/OOD MAE, RMSE, maximum cell error, 30/60/120-second rollout error, physics residual, controller peak/mean/spread temperature, pump energy, safety count/duration, and fault detection lead time from saved artifacts only; missing matrix cells or incompatible provenance fail; results describe configured runs and make no CI, significance, generalization, or superiority claim unless measured values support it.
+  - Verification: `python -m pytest tests/test_final_evaluation.py`.
+  - Dependencies: TASK-69, Checkpoint P12B.
+- TASK-71: Generate presentation figures directly from saved evaluation artifacts.
+  - Likely file scope: `src/thermotwin/visualization/benchmark_plots.py`; `tests/test_benchmark_plots.py`.
+  - Acceptance: figures cover the four-variant controller matrix, model ID/OOD and horizon errors, physics residuals, scenario thermal/energy tradeoffs, and fault timing; units, scenario/model labels, and quick/full evidence status are visible and accessible; no plotted number is recomputed from hidden inputs.
+  - Verification: `python -m pytest tests/test_benchmark_plots.py`.
+  - Dependencies: TASK-70.
+- TASK-72: Perform an actual-user, browser, CLI, architecture, and release audit and reconcile documentation.
+  - Likely file scope: `README.md`; `PLAN.md`; `tasks/plan.md`; `tasks/todo.md`; `scripts/benchmark.py`; `tests/test_benchmark_script.py`; `src/thermotwin/visualization/dashboard.py`; `tests/test_dashboard.py`. Any newly discovered defect outside this sequential scope requires a separately scoped repair before release.
+  - Acceptance: a clean user follows README commands from environment setup through quick benchmark, artifact loading, and dashboard interaction; browser inspection covers the 3x4 measured/predicted heatmaps, horizons, controller/model comparisons, cooling trace, responsive layout, accessibility, console errors, and hidden-truth separation; CLI failures are actionable and traceback-free; dependency direction, type/lint/test gates, deterministic reruns, full-mode provenance rejection, non-overwrite behavior, saved numbers, and claims are audited; docs report only generated evidence and disclose predictive exogenous persistence and synthetic/descriptive limitations.
+  - Verification: `python -m pytest`; `python -m ruff check .`; `python -m mypy src tests scripts`; all documented smoke/quick commands; headless dashboard health plus browser/AppTest journey; `git diff --check`.
+  - Dependencies: TASK-71.
+- Checkpoint P12C: final release is accepted only after the actual-user journey, full quality gates, fresh benchmark artifacts, dashboard/browser review, and evidence-to-claim audit pass. Until then Phase 12 remains incomplete.
+
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
@@ -246,7 +324,13 @@ Phase 9-11 integration audit evidence (TASK-60): full pytest passed with 1,265 t
 | Fault-label leakage | High | Keep fault configuration in simulator/scenario provenance, never detector or controller input |
 | Single-sample false alarm | High | Require configurable rolling calibration and consecutive detections |
 | Dashboard logic drift | Medium | Load immutable saved artifacts and keep simulation/training outside the UI module |
+| Empty or undersized evaluation split | High | Validate before indexing and return an actionable CLI error |
+| Mismatched forecast comparison source | High | Require both twins to share one persisted source state and action |
+| Benchmark scenario drift | High | Instantiate once and reuse the immutable scenario across all four variants |
+| Smoke-model performance claim | High | Persist training mode and reject smoke artifacts in full benchmark mode |
+| Future-exogenous leakage | High | Use and disclose persistence for unavailable future conditions; prohibit simulator truth |
+| Hidden fault truth in operator UI | High | Separate evaluation provenance from inference-facing suspected-cell output |
 
-## Future Phases Beyond This Implementation
+## Future Work Beyond Phase 12
 
-- Phase 12 adds the benchmark suite across normal, high-current, hot-ambient, weak-cooling, charging, and resistance-fault scenarios.
+- Any statistical generalization study requires repeated independently sampled scenario families and uncertainty analysis beyond this deterministic descriptive benchmark.
