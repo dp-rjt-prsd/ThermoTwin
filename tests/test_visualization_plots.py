@@ -131,6 +131,12 @@ def test_pack_heatmap_maps_canonical_grid_and_preserves_input() -> None:
     ]
     assert heatmap.colorbar.title.text == "Temperature (K)"
     assert "Kelvin" in heatmap.hovertemplate
+    assert len(figure.layout.annotations) == 12
+    assert {item.text.split("<br>")[0] for item in figure.layout.annotations} == {
+        f"C{index}" for index in range(1, 13)
+    }
+    assert all(item.bgcolor == "#FFFFFF" for item in figure.layout.annotations)
+    assert all(item.font.color == "#111111" for item in figure.layout.annotations)
     np.testing.assert_array_equal(temperatures, original)
 
 
@@ -154,6 +160,12 @@ def test_temperature_and_coolant_figures_show_units_and_saved_data() -> None:
     assert temperature_figure.layout.xaxis.title.text == "Time (s)"
     assert temperature_figure.layout.yaxis.title.text == "Temperature (K)"
     assert all("K" in (item.hovertemplate or "") for item in temperature_figure.data)
+    cell_traces = [
+        item for item in temperature_figure.data if item.name.startswith("C")
+    ]
+    assert len({item.marker.symbol for item in cell_traces}) == 12
+    assert len({item.line.dash for item in cell_traces}) > 1
+    assert all(item.mode == "lines+markers" for item in cell_traces)
 
     coolant_figure = coolant_flow_figure(trace, title="Saved coolant flow")
     coolant = coolant_figure.data[0]
@@ -223,7 +235,9 @@ def test_fault_diagnostics_has_target_cell_lines_limit_and_event_markers() -> No
         "Detection": 7.0,
         "Thermal-limit crossing": 10.0,
     }
-    assert figure.layout.title.text == "Fault-induced thermal anomaly diagnostics - C5"
+    assert figure.layout.title.text == (
+        "Evaluation-only injected-fault truth/outcome - configured cell C5"
+    )
     assert "runaway" not in figure.layout.title.text.lower()
 
 

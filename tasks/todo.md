@@ -325,11 +325,12 @@ Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of
   - Verify: `python -m pytest tests/test_dashboard_data.py`.
   - Dependencies: TASK-62.
   - Accepted: the schema-v2 loader validates one threshold source/action and rejects mixed or legacy fields; immutable snapshots share that source while retaining distinct predictions. Verification passed with 30 tests, Ruff, strict mypy, and a fresh writer-to-loader smoke integration.
-- [ ] TASK-64 Repair dashboard accessibility and hidden-truth separation.
+- [x] TASK-64 Repair dashboard accessibility and hidden-truth separation.
   - Scope: `src/thermotwin/visualization/dashboard.py`; `src/thermotwin/visualization/plots.py`; `tests/test_dashboard.py`; `tests/test_visualization_plots.py`.
   - Acceptance: measured and predicted heatmaps share saved source provenance; accessible labels and non-color cues are present; operator-facing suspected-cell output comes only from detector evidence or says unavailable; configured fault truth is isolated as evaluation-only.
   - Verify: `python -m pytest tests/test_dashboard.py tests/test_visualization_plots.py`; documented headless dashboard health check.
   - Dependencies: TASK-63.
+  - Accepted: the measured heatmap uses the shared threshold source; provenance is visible; detector events alone drive the operator panel; injected truth is evaluation-only; labels have high-contrast backgrounds and all cell traces have non-color cues. Verification passed with 21 tests, Ruff, strict mypy, and a fresh HTTP 200 `ok` dashboard health check.
 - [ ] TASK-65 Define immutable benchmark/result contracts.
   - Scope: `src/thermotwin/experiments/benchmark_types.py`; `tests/test_benchmark_types.py`.
   - Acceptance: contracts validate scenario/variant identity, seed, model and dataset provenance, training mode, persistence assumptions, controller/forecast/physics/fault metrics, finite values, and matrix uniqueness; full mode rejects smoke-trained model artifacts.

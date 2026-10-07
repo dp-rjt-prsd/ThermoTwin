@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import os
 
 import streamlit as st
@@ -11,8 +10,8 @@ from plotly.graph_objects import Figure  # type: ignore[import-untyped]
 from thermotwin.visualization.contracts import (
     ControllerTrace,
     DashboardData,
+    FaultEvent,
     FaultSummary,
-    FaultTrace,
 )
 from thermotwin.visualization.data import load_dashboard_data
 from thermotwin.visualization.plots import (
@@ -65,25 +64,19 @@ def _temperature_history_figure(
 
 
 def _fault_indicators(
-    trace: FaultTrace, summary: FaultSummary
-) -> tuple[float | None, float]:
-    """Return score/hotspot from the target cell's event or saved trace."""
-    cell_index = summary.fault_cell_index
-    cell_events = [event for event in summary.events if event.cell_index == cell_index]
-    if cell_events:
-        event = max(cell_events, key=lambda item: item.detection_time_s)
-        return event.anomaly_score, event.predicted_hotspot_temperature_k
-
-    score = next(
-        (
-            float(value)
-            for value in reversed(trace.scores[:, cell_index])
-            if math.isfinite(float(value))
+    summary: FaultSummary,
+) -> FaultEvent | None:
+    """Select the latest persisted detector event; ties prefer score then cell ID."""
+    if not summary.events:
+        return None
+    return max(
+        summary.events,
+        key=lambda event: (
+            event.detection_time_s,
+            event.anomaly_score,
+            -event.cell_index,
         ),
-        None,
     )
-    hotspot = float(trace.predicted_temperature_k[:, cell_index].max())
-    return score, hotspot
 
 
 def render_dashboard(data: DashboardData) -> None:
@@ -121,10 +114,22 @@ def render_dashboard(data: DashboardData) -> None:
         if item.horizon_s == float(horizon)
     )
     st.subheader("Measured and predicted pack temperatures")
+    st.caption(
+        "Shared measured source: threshold-run data | "
+        f"source time: {snapshot.source_time_s:.2f} s | "
+        f"selected model: {selected_model_label} | "
+        f"forecast horizon: {horizon} s | "
+        "constant saved coolant action: "
+        f"{snapshot.action_coolant_mass_flow_kg_s:.4f} kg/s"
+    )
     measured_column, predicted_column = st.columns(2)
     measured_column.plotly_chart(
         pack_heatmap_figure(
-            trace.cell_temperatures_k[-1], title="Final measured pack temperatures"
+            snapshot.source_cell_temperatures_k,
+            title=(
+                "Shared threshold-run measured pack temperatures at "
+                f"{snapshot.source_time_s:.2f} s"
+            ),
         ),
         width="stretch",
         key="measured_heatmap",
@@ -168,30 +173,34 @@ def render_dashboard(data: DashboardData) -> None:
     )
 
     fault_trace = data.fault_trace
-    cell_index = summary.fault_cell_index
-    anomaly_score, predicted_hotspot = _fault_indicators(fault_trace, summary)
-    st.subheader("Fault-induced thermal anomaly")
+    event = _fault_indicators(summary)
+    suspected_cell = f"C{event.cell_index + 1}" if event is not None else "Unavailable"
+    anomaly_score = event.anomaly_score if event is not None else None
+    predicted_hotspot = (
+        event.predicted_hotspot_temperature_k if event is not None else None
+    )
+    detection_time = event.detection_time_s if event is not None else None
+    st.subheader("Fault detection (operator view)")
     fault_columns = st.columns(3)
     fault_columns[0].markdown(
-        "**Suspected / configured cell**\n\n"
-        f"C{cell_index + 1} ("
-        f"{'detected' if summary.detected_fault_cell else 'configured'})"
+        "**Suspected cell**\n\n" + suspected_cell
     )
     fault_columns[1].markdown(
         "**Anomaly score**\n\n" + _fault_value(anomaly_score, "")
     )
     fault_columns[2].markdown(
-        "**Predicted hotspot**\n\n" + _format_metric(predicted_hotspot, "K")
+        "**Predicted hotspot**\n\n" + _fault_value(predicted_hotspot, "K")
     )
     fault_columns[0].markdown(
-        "**Detection time**\n\n" + _fault_value(summary.detection_time_s, "s")
+        "**Detection time**\n\n" + _fault_value(detection_time, "s")
     )
-    fault_columns[1].markdown(
-        "**Measured threshold crossing**\n\n"
-        + _fault_value(summary.threshold_crossing_time_s, "s")
-    )
-    fault_columns[2].markdown(
-        "**Measured lead time**\n\n" + _fault_value(summary.lead_time_s, "s")
+    st.subheader("Evaluation-only injected-fault truth/outcome")
+    st.markdown(
+        f"Configured injected-fault cell: C{summary.fault_cell_index + 1} | "
+        f"fault start: {_fault_value(summary.fault_start_time_s, 's')} | "
+        "measured threshold crossing: "
+        f"{_fault_value(summary.threshold_crossing_time_s, 's')} | "
+        f"measured lead time: {_fault_value(summary.lead_time_s, 's')}"
     )
     st.plotly_chart(
         fault_diagnostics_figure(fault_trace, summary),

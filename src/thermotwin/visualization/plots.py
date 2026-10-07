@@ -42,6 +42,21 @@ _METRICS = (
     ("time_above_thermal_limit_s", "Time above thermal limit (s)"),
 )
 _COLORS = ("#0072B2", "#D55E00", "#009E73", "#CC79A7")
+_CELL_MARKERS = (
+    "circle",
+    "square",
+    "diamond",
+    "cross",
+    "x",
+    "triangle-up",
+    "triangle-down",
+    "triangle-left",
+    "triangle-right",
+    "pentagon",
+    "hexagon",
+    "star",
+)
+_CELL_DASHES = ("solid", "dash", "dot", "dashdot", "longdash", "longdashdot")
 
 
 def _require_type(value: object, expected: type[object], name: str) -> None:
@@ -92,8 +107,6 @@ def pack_heatmap_figure(
             x=["Column 1", "Column 2", "Column 3", "Column 4"],
             y=["Row 1", "Row 2", "Row 3"],
             text=labels,
-            texttemplate="%{text}<br>%{z:.1f} K",
-            textfont=dict(size=13, color="#111111"),
             colorscale="Inferno",
             colorbar=dict(title=dict(text="Temperature (K)")),
             hovertemplate="%{text}<br>Temperature: %{z:.2f} Kelvin<extra></extra>",
@@ -101,6 +114,19 @@ def pack_heatmap_figure(
             ygap=3,
         )
     )
+    for row in range(3):
+        for column in range(4):
+            figure.add_annotation(
+                x=f"Column {column + 1}",
+                y=f"Row {row + 1}",
+                text=f"{labels[row, column]}<br>{grid[row, column]:.1f} K",
+                showarrow=False,
+                bgcolor="#FFFFFF",
+                bordercolor="#17212b",
+                borderwidth=1,
+                borderpad=3,
+                font=dict(size=12, color="#111111"),
+            )
     figure.update_xaxes(side="top", title_text="Pack column", ticks="")
     figure.update_yaxes(autorange="reversed", title_text="Pack row", ticks="")
     figure.update_layout(yaxis=dict(scaleanchor="x", scaleratio=1))
@@ -127,9 +153,14 @@ def temperature_timeseries_figure(
             go.Scatter(
                 x=trace.time_s,
                 y=temperatures[:, cell_index],
-                mode="lines",
+                mode="lines+markers",
                 name=f"C{cell_index + 1}",
-                line=dict(color=_COLORS[cell_index % len(_COLORS)], width=1.2),
+                line=dict(
+                    color=_COLORS[cell_index % len(_COLORS)],
+                    width=1.2,
+                    dash=_CELL_DASHES[cell_index % len(_CELL_DASHES)],
+                ),
+                marker=dict(symbol=_CELL_MARKERS[cell_index], size=5),
                 hovertemplate=(
                     f"Time: %{{x:.2f}} s<br>C{cell_index + 1}: "
                     "%{y:.2f} K<extra></extra>"
@@ -427,7 +458,11 @@ def fault_diagnostics_figure(trace: FaultTrace, summary: FaultSummary) -> go.Fig
     figure.update_xaxes(title_text="Time (s)")
     figure.update_yaxes(title_text="Temperature (K)")
     figure.update_layout(legend_title_text=f"{cell_name} thermal diagnostics")
-    return _layout(figure, f"Fault-induced thermal anomaly diagnostics - {cell_name}")
+    return _layout(
+        figure,
+        "Evaluation-only injected-fault truth/outcome - configured cell "
+        f"{cell_name}",
+    )
 
 
 __all__ = [

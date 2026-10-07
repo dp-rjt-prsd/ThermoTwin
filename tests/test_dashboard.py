@@ -5,13 +5,15 @@ import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 
+import numpy as np
 import pytest
 from streamlit.testing.v1 import AppTest
 
 from test_dashboard_data import make_artifacts
+from thermotwin.visualization import dashboard as dashboard_module
 from thermotwin.visualization.contracts import FaultEvent
 from thermotwin.visualization.dashboard import (
     _fault_indicators,
@@ -52,9 +54,19 @@ def test_dashboard_renders_artifacts_with_selectors_metrics_and_fault_panel(
         "Forecast horizon (seconds)",
     }
     assert any(item.value == "301.00 K" for item in app.metric)
-    assert any("Suspected / configured cell" in item.value for item in app.markdown)
-    assert any("C5" in item.value for item in app.markdown)
-    assert any("Unavailable" in item.value for item in app.markdown)
+    markdown = [item.value for item in app.markdown]
+    assert any("Suspected cell" in value for value in markdown)
+    assert any(
+        "Evaluation-only injected-fault truth/outcome" in item.value
+        for item in app.subheader
+    )
+    assert any(
+        "Configured injected-fault cell" in value and "C5" in value
+        for value in markdown
+    )
+    assert any(
+        "Suspected cell" in value and "Unavailable" in value for value in markdown
+    )
     chart_keys = (
         "measured_heatmap",
         "predicted_heatmap",
@@ -166,7 +178,7 @@ def test_temperature_figure_uses_trace_limit_not_fault_limit(tmp_path: Path) -> 
     assert set(limit_trace.y) == {337.0}
 
 
-def test_fault_indicators_use_target_cell_event_or_target_cell_trace(
+def test_fault_indicators_choose_latest_event_independent_of_injected_cell(
     tmp_path: Path,
 ) -> None:
     predictive, fault = make_artifacts(tmp_path)
@@ -179,21 +191,12 @@ def test_fault_indicators_use_target_cell_event_or_target_cell_trace(
         predicted_hotspot_temperature_k=399.0,
         severity_k=20.0,
     )
-    predicted_temperatures = data.fault_trace.predicted_temperature_k.copy()
-    predicted_temperatures[:, 3] = 399.0
-    fault_trace = replace(
-        data.fault_trace, predicted_temperature_k=predicted_temperatures
-    )
     fallback_summary = replace(
         summary, anomaly_event_count=1, events=(unrelated_event,)
     )
 
-    fallback_score, fallback_hotspot = _fault_indicators(
-        fault_trace, fallback_summary
-    )
-
-    assert fallback_score == pytest.approx(0.5)
-    assert fallback_hotspot == pytest.approx(300.0)
+    latest_event = _fault_indicators(fallback_summary)
+    assert latest_event == unrelated_event
 
     target_event = FaultEvent(
         cell_index=summary.fault_cell_index,
@@ -202,12 +205,87 @@ def test_fault_indicators_use_target_cell_event_or_target_cell_trace(
         predicted_hotspot_temperature_k=315.0,
         severity_k=15.0,
     )
+    tied_event = FaultEvent(
+        cell_index=2,
+        anomaly_score=8.5,
+        detection_time_s=6.0,
+        predicted_hotspot_temperature_k=314.0,
+        severity_k=14.0,
+    )
     event_summary = replace(
         summary,
-        anomaly_event_count=2,
-        events=(unrelated_event, target_event),
+        anomaly_event_count=3,
+        events=(unrelated_event, target_event, tied_event),
     )
-    event_score, event_hotspot = _fault_indicators(data.fault_trace, event_summary)
+    event = _fault_indicators(event_summary)
 
-    assert event_score == pytest.approx(8.5)
-    assert event_hotspot == pytest.approx(315.0)
+    assert event == tied_event
+
+
+def test_fault_indicators_show_no_suspected_cell_without_detector_events(
+    tmp_path: Path,
+) -> None:
+    predictive, fault = make_artifacts(tmp_path)
+    data = load_dashboard_data(predictive, fault)
+
+    assert _fault_indicators(data.fault_summary) is None
+
+
+def test_dashboard_uses_shared_measured_snapshot_not_selected_controller_terminal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    predictive, fault = make_artifacts(tmp_path)
+    data = load_dashboard_data(predictive, fault)
+    selected = data.controller_traces["predictive_data_only"]
+    temperatures = selected.cell_temperatures_k.copy()
+    temperatures[-1, :] = 350.0
+    selected_controller = replace(selected, cell_temperatures_k=temperatures)
+    traces = dict(data.controller_traces)
+    traces["predictive_data_only"] = selected_controller
+    dashboard_data = replace(data, controller_traces=traces)
+    charts: dict[str, object] = {}
+    captions: list[str] = []
+
+    class _Column:
+        def metric(self, *_args: object) -> None:
+            return None
+
+        def markdown(self, *_args: object) -> None:
+            return None
+
+        def plotly_chart(self, figure: object, *, key: str, **_kwargs: object) -> None:
+            charts[key] = figure
+
+    def _columns(count: int) -> list[_Column]:
+        return [_Column() for _ in range(count)]
+
+    fake_streamlit = SimpleNamespace(
+        title=lambda *_args: None,
+        caption=lambda value: captions.append(value),
+        selectbox=lambda label, options, **_kwargs: {
+            "Controller": "Predictive (data-only)",
+            "Thermal twin model": "Data-only",
+            "Forecast horizon (seconds)": 120,
+        }[label],
+        columns=_columns,
+        subheader=lambda *_args: None,
+        markdown=lambda *_args: None,
+        plotly_chart=lambda figure, *, key, **_kwargs: charts.__setitem__(key, figure),
+    )
+    monkeypatch.setattr(dashboard_module, "st", fake_streamlit)
+
+    dashboard_module.render_dashboard(dashboard_data)
+
+    expected_source = data.model_forecasts["data_only"][2].source_cell_temperatures_k
+    measured_figure = cast(Any, charts["measured_heatmap"])
+    measured = np.asarray(measured_figure.data[0].z).reshape(-1)
+    np.testing.assert_array_equal(measured, expected_source)
+    assert not np.array_equal(measured, selected_controller.cell_temperatures_k[-1])
+    assert any(
+        "shared measured source: threshold-run data" in value.lower()
+        for value in captions
+    )
+    assert any("source time: 2.00 s" in value.lower() for value in captions)
+    assert any("selected model: data-only" in value.lower() for value in captions)
+    assert any("forecast horizon: 120 s" in value.lower() for value in captions)
+    assert any("coolant action: 0.1000 kg/s" in value.lower() for value in captions)
