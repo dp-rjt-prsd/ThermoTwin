@@ -39,6 +39,10 @@ def _run_dashboard(
     return AppTest.from_file(str(DASHBOARD_PATH), default_timeout=120).run()
 
 
+def _markdown(app: AppTest) -> list[str]:
+    return [item.value for item in app.markdown]
+
+
 def test_dashboard_renders_guided_demo_with_story_navigation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -48,18 +52,23 @@ def test_dashboard_renders_guided_demo_with_story_navigation(
 
     assert not app.exception
     assert not app.error
-    assert any("synthetic" in item.value.lower() for item in app.info)
+    markdown = _markdown(app)
+    assert any("not evidence of production safety" in value for value in markdown)
     assert all("thermal-runaway" not in item.value for item in app.caption)
+    assert any("tt-pack" in value for value in markdown)
     assert app.get_by_key("v2_guided_primary") is not None
     assert {item.label for item in app.selectbox} >= {"Equation explorer"}
-    options = app.radio(key="guided_story_step").options
-    for _ in range(len(options) - 1):
+    assert any("Live telemetry" in value for value in markdown)
+    for expected in range(2, 8):
         app.button(key="guided_next").click().run()
         assert not app.exception
         assert not app.error
-    assert app.radio(key="guided_story_step").value == options[-1]
+        assert app.session_state["guided_step"] == expected
     app.button(key="guided_prev").click().run()
-    assert app.radio(key="guided_story_step").value == options[-2]
+    assert app.session_state["guided_step"] == 6
+    app.button(key="guided_step_2").click().run()
+    assert app.session_state["guided_step"] == 2
+    assert any("tt-conn" in value for value in _markdown(app))
 
 
 def test_guided_forecast_step_shows_measured_and_forecast_maps(
@@ -67,8 +76,7 @@ def test_guided_forecast_step_shows_measured_and_forecast_maps(
 ) -> None:
     predictive, fault = make_artifacts(tmp_path)
     app = _run_dashboard(predictive, fault, monkeypatch)
-    options = app.radio(key="guided_story_step").options
-    app.radio(key="guided_story_step").set_value(options[3]).run()
+    app.button(key="guided_step_4").click().run()
 
     assert not app.exception
     for horizon in (30, 60, 120):
@@ -76,6 +84,8 @@ def test_guided_forecast_step_shows_measured_and_forecast_maps(
         assert not app.exception
         assert app.get_by_key("v2_guided_measured_heatmap") is not None
         assert app.get_by_key("v2_guided_predicted_heatmap") is not None
+        assert any(f"+{horizon:.2f} s horizon" in value for value in _markdown(app))
+        assert any("tt-tile-forecast" in value for value in _markdown(app))
 
 
 def test_dashboard_navigation_renders_every_judge_view(
@@ -105,9 +115,10 @@ def test_dashboard_navigation_renders_every_judge_view(
     assert not app.exception
     assert app.get_by_key("v2_fault_diagnostics") is not None
     assert app.get_by_key("v2_fault_scores") is not None
-    markdown = [item.value for item in app.markdown]
-    assert any("Evaluation-only injected-fault truth" in value for value in markdown)
-    assert any("C5" in value and "Configured cell" in value for value in markdown)
+    markdown = _markdown(app)
+    assert any("Evaluation-only ground truth" in value for value in markdown)
+    assert any("Injected fault" in value and "C5" in value for value in markdown)
+    assert any("Safety monitoring" in value for value in markdown)
 
 
 def test_live_lab_runs_only_on_request_and_plays_back(
@@ -130,13 +141,16 @@ def test_live_lab_runs_only_on_request_and_plays_back(
     assert any("Fault start moved" in item.value for item in app.warning)
     assert app.get_by_key("v2_live_heatmap") is not None
     assert app.get_by_key("v2_live_temperature_history") is not None
-    assert len(app.metric) == 6
+    assert any("Active controller" in value for value in _markdown(app))
 
     app.button(key="lab_play").click().run()
     assert not app.exception
     app.slider(key="lab_frame").set_value(3).run()
     assert not app.exception
-    assert app.metric[0].value == "4 s"
+    assert any(
+        "Time</div>" in value and ">4 <small>s</small>" in value
+        for value in _markdown(app)
+    )
 
 
 def test_dashboard_benchmark_views_with_saved_evaluation(
@@ -152,6 +166,7 @@ def test_dashboard_benchmark_views_with_saved_evaluation(
     assert not app.exception
     assert app.get_by_key("v2_cooling_controller_matrix") is not None
     assert app.get_by_key("v2_cooling_forecast_comparison") is not None
+    assert any("Benchmark summary" in value for value in _markdown(app))
     for option in app.radio(key="ct_metric").options:
         app.radio(key="ct_metric").set_value(option).run()
         assert not app.exception
@@ -181,13 +196,12 @@ def test_dashboard_reports_invalid_artifact_without_traceback(
     assert not any("Traceback" in item.value for item in app.error)
 
 
-def test_dashboard_paths_can_be_set_in_sidebar_inputs(
+def test_dashboard_paths_can_be_set_in_source_inputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     predictive, fault = make_artifacts(tmp_path)
     monkeypatch.setenv("THERMOTWIN_PREDICTIVE_RESULTS", "")
     monkeypatch.setenv("THERMOTWIN_FAULT_RESULTS", "")
-
     monkeypatch.setenv("THERMOTWIN_EVALUATION_RESULTS", "")
 
     app = AppTest.from_file(str(DASHBOARD_PATH), default_timeout=120).run()

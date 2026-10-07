@@ -232,6 +232,26 @@ def pack_map(
     )
 
 
+def conduction_flows(
+    temperatures_k: Sequence[float] | FloatArray,
+    edges: Sequence[tuple[int, int]],
+    thermal_resistance_k_w: float,
+    *,
+    minimum_w: float = 0.05,
+) -> list[tuple[int, int, float]]:
+    """Hot-to-cold neighbour flows (hot, cold, W), strongest first: ΔT / R_th."""
+    temperatures = np.asarray(temperatures_k, dtype=float)
+    flows: list[tuple[int, int, float]] = []
+    for left, right in edges:
+        difference = float(temperatures[left] - temperatures[right])
+        hot, cold = (left, right) if difference >= 0 else (right, left)
+        watts = abs(difference) / thermal_resistance_k_w
+        if watts >= minimum_w:
+            flows.append((hot, cold, watts))
+    flows.sort(key=lambda item: item[2], reverse=True)
+    return flows
+
+
 def add_heat_flow_arrows(
     figure: go.Figure,
     temperatures_k: Sequence[float] | FloatArray,
@@ -242,15 +262,9 @@ def add_heat_flow_arrows(
     minimum_w: float = 0.05,
 ) -> list[tuple[int, int, float]]:
     """Overlay the strongest hot-to-cold conduction flows, (T_hot−T_cold)/R_th."""
-    temperatures = np.asarray(temperatures_k, dtype=float)
-    flows: list[tuple[int, int, float]] = []
-    for left, right in edges:
-        difference = float(temperatures[left] - temperatures[right])
-        hot, cold = (left, right) if difference >= 0 else (right, left)
-        watts = abs(difference) / thermal_resistance_k_w
-        if watts >= minimum_w:
-            flows.append((hot, cold, watts))
-    flows.sort(key=lambda item: item[2], reverse=True)
+    flows = conduction_flows(
+        temperatures_k, edges, thermal_resistance_k_w, minimum_w=minimum_w
+    )
     for hot, cold, watts in flows[:count]:
         hot_row, hot_column = divmod(hot, 4)
         cold_row, cold_column = divmod(cold, 4)
@@ -749,6 +763,7 @@ __all__ = [
     "CONTROLLER_NAMES",
     "SCENARIO_NAMES",
     "add_heat_flow_arrows",
+    "conduction_flows",
     "anomaly_score_figure",
     "controller_scorecard",
     "coolant_history",

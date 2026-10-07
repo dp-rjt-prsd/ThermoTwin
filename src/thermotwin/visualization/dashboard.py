@@ -15,7 +15,10 @@ from thermotwin.visualization.contracts import (
     FaultEvent,
     FaultSummary,
 )
-from thermotwin.visualization.dashboard_views import render_application
+from thermotwin.visualization.dashboard_views import (
+    render_application,
+    render_source_inputs,
+)
 from thermotwin.visualization.data import load_dashboard_data, load_evaluation
 from thermotwin.visualization.plots import (
     controller_comparison_figure,
@@ -240,60 +243,62 @@ def render_dashboard(data: DashboardData) -> None:
     )
 
 
+def _initialise_sources() -> tuple[str, str, str]:
+    """Seed artifact paths from the environment once, then read session state."""
+    defaults = {
+        "predictive_directory": os.environ.get("THERMOTWIN_PREDICTIVE_RESULTS", ""),
+        "fault_directory": os.environ.get("THERMOTWIN_FAULT_RESULTS", ""),
+        "evaluation_directory": _default_evaluation_directory(),
+    }
+    for key, value in defaults.items():
+        st.session_state.setdefault(key, value)
+    return (
+        str(st.session_state["predictive_directory"]).strip(),
+        str(st.session_state["fault_directory"]).strip(),
+        str(st.session_state["evaluation_directory"]).strip(),
+    )
+
+
+def _landing(message: str, *, error: bool = False) -> None:
+    st.title("ThermoTwin · Battery Thermal Digital Twin")
+    st.caption(
+        "A judge-focused thermal control room for saved temperature forecasts, "
+        "cooling comparisons, and fault-induced anomaly evidence."
+    )
+    if error:
+        st.error(message)
+    else:
+        st.info(message)
+    render_source_inputs()
+
+
 def main() -> None:
     """Load validated artifact roots and render the V2 judge experience."""
     st.set_page_config(
         page_title="ThermoTwin · Thermal Digital Twin",
         page_icon="🌡️",
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed",
     )
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
-    with st.sidebar:
-        st.markdown("## ThermoTwin")
-        sources_ready = bool(
-            os.environ.get("THERMOTWIN_PREDICTIVE_RESULTS")
-            and os.environ.get("THERMOTWIN_FAULT_RESULTS")
-        )
-        with st.expander("Evidence sources", expanded=not sources_ready):
-            predictive_directory = st.text_input(
-                "Predictive results directory",
-                value=os.environ.get("THERMOTWIN_PREDICTIVE_RESULTS", ""),
-                key="predictive_directory",
-            )
-            fault_directory = st.text_input(
-                "Fault results directory",
-                value=os.environ.get("THERMOTWIN_FAULT_RESULTS", ""),
-                key="fault_directory",
-            )
-            evaluation_directory = st.text_input(
-                "Benchmark evaluation directory (optional)",
-                value=_default_evaluation_directory(),
-                key="evaluation_directory",
-            )
-    if not predictive_directory.strip() or not fault_directory.strip():
-        st.title("ThermoTwin · Battery Thermal Digital Twin")
-        st.caption(
-            "A judge-focused thermal control room for saved temperature forecasts, "
-            "cooling comparisons, and fault-induced anomaly evidence."
-        )
-        st.info(
-            "Enter both artifact directories in the sidebar under Evidence sources. "
-            "Point them to saved predictive comparison and fault detection results."
+    predictive_directory, fault_directory, evaluation_directory = _initialise_sources()
+    if not predictive_directory or not fault_directory:
+        _landing(
+            "Enter both artifact directories below. Point them to saved predictive "
+            "comparison and fault detection results."
         )
         return
     try:
         data = _load_dashboard_data_cached(predictive_directory, fault_directory)
     except (OSError, UnicodeError, ValueError) as exc:
-        st.title("ThermoTwin · Battery Thermal Digital Twin")
-        st.error(f"Could not load dashboard artifacts: {exc}")
+        _landing(f"Could not load dashboard artifacts: {exc}", error=True)
         return
     evaluation: FinalEvaluation | None = None
-    if evaluation_directory.strip():
+    if evaluation_directory:
         try:
-            evaluation = _load_evaluation_cached(evaluation_directory.strip())
+            evaluation = _load_evaluation_cached(evaluation_directory)
         except (OSError, UnicodeError, ValueError, KeyError, TypeError) as exc:
-            st.sidebar.warning(f"Benchmark evaluation not loaded: {exc}")
+            st.toast(f"Benchmark evaluation not loaded: {exc}")
     render_application(
         data,
         evaluation=evaluation,

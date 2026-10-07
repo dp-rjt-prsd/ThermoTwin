@@ -173,7 +173,8 @@ The Streamlit dashboard is a judge-focused thermal control room with four views:
   evaluation-only injected-fault truth.
 
 Every view links its visuals to the thermal, control, model or diagnostic
-equations behind them, and the sidebar has an equation explorer. Display values
+equations behind them, and the top bar's **Physics & Formulas** menu is an equation
+explorer. Display values
 use Celsius; hover text, provenance and downloads keep SI units and kelvin.
 Figures are built in `visualization/judge_figures.py`. The original Kelvin
 figures in `visualization/plots.py` remain for the artifact-level API.
@@ -199,18 +200,27 @@ exists. Otherwise those panels show a hint instead of charts.
 `THERMOTWIN_PREDICTIVE_RESULTS`, `THERMOTWIN_FAULT_RESULTS` and, when given,
 `THERMOTWIN_EVALUATION_RESULTS` for Streamlit. It also passes the dashboard
 theme, so it works from any directory, and it is the recommended way to launch.
-To launch Streamlit directly from PowerShell, run it from the repository root so
-`.streamlit/config.toml` supplies the theme, and set the variables first:
+To launch Streamlit directly from PowerShell, set the variables first and pass
+the same theme flags the launcher uses:
 
 ```powershell
 $env:THERMOTWIN_PREDICTIVE_RESULTS = "results/phase12-dashboard-predictive"
 $env:THERMOTWIN_FAULT_RESULTS = "results/phase12-dashboard-fault"
 $env:THERMOTWIN_EVALUATION_RESULTS = "results/phase12-final-evaluation"
-python -m streamlit run src/thermotwin/visualization/dashboard.py
+python -m streamlit run src/thermotwin/visualization/dashboard.py --theme.base=dark --theme.primaryColor=#27C2D1 --theme.backgroundColor=#071018 --theme.secondaryBackgroundColor=#0D1822 --theme.textColor=#F3F7F9
 ```
 
-The artifact paths can also be changed at runtime in the sidebar under
-**Evidence sources**.
+A local `.streamlit/config.toml` with the same `[theme]` values also works; that
+folder is git-ignored.
+
+The artifact paths can also be changed at runtime from the **Evidence** menu in
+the top bar.
+
+The layout follows a control-room design: a top navigation bar, a left rail
+(story steps or run conditions), a central canvas of header-bar cards with
+colour-tinted 3×4 pack tiles, and a right rail for live telemetry and safety
+monitoring. The HTML building blocks are in `visualization/ui_components.py` and
+the styling is in `visualization/presentation.py`.
 
 The authoritative health endpoint is `http://localhost:8501/_stcore/health`; a
 healthy server returns HTTP 200 with `ok`.
