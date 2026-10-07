@@ -19,7 +19,7 @@ plays the role of the real pack.
 |---|---|
 | **Battery pack simulator** | 12 cells in a 3 × 4 grid. Each cell heats up from current (Joule heating, I²R), passes heat to its neighbours, loses heat to the air, and is cooled by a liquid cold plate. This is the "real" pack. |
 | **Two digital twins** | Small neural networks that learn to predict the next cell temperatures. One learns from data only; the other is also penalised when it breaks the energy balance (physics-informed). |
-| **Four cooling controllers** | *Threshold* and *PID* react to the measured temperature. Two *predictive* controllers try five coolant flow rates on the twin, look 12 seconds ahead, and pick the best trade-off between temperature, uniformity and pump energy. |
+| **Four cooling controllers** | *Threshold* and *PID* react to the measured temperature. Two *predictive* controllers try five coolant flow rates on the twin, look 12 seconds ahead, and pick the cheapest option that keeps the pack below a 33 °C comfort target and well clear of the 40 °C limit. |
 | **Fault detector** | Compares measured and twin-predicted temperatures to spot a cell that is heating abnormally (for example, from increased internal resistance). |
 | **Dashboard** | An interactive control-room screen for exploring all of the above. |
 
@@ -56,37 +56,29 @@ This creates a private Python environment in the `.venv` folder and installs
 everything ThermoTwin needs. Next time, you only need `cd ThermoTwin` and
 `.venv\Scripts\Activate.ps1`.
 
-### Step 2 — Create the results the dashboard shows (once, about 2 minutes)
+### Step 2 — Create the results the dashboard shows (once, about 10 minutes)
 
-The repository holds the code, not the generated results. These commands build
-them: create training data, train both twins, test them, compare the controllers,
-and run a fault case. Run them **in order**, from the `ThermoTwin` folder:
+The repository holds the code, not the generated results. One command builds
+them all, from the `ThermoTwin` folder:
 
 ```powershell
-python scripts/generate_dataset.py --seed 1729 --trajectory-count 6 --output-directory data/processed/id
-python scripts/generate_dataset.py --ood --seed 1730 --trajectory-count 6 --output-directory data/processed/ood
-python scripts/compare_models.py --id-dataset-directory data/processed/id --ood-dataset-directory data/processed/ood --output-directory results/phase12-final-comparison
-python scripts/evaluate_forecasts.py --comparison-directory results/phase12-final-comparison --dataset-directory data/processed/id --output-directory results/forecast-id
-python scripts/evaluate_forecasts.py --comparison-directory results/phase12-final-comparison --dataset-directory data/processed/ood --output-directory results/forecast-ood
-python scripts/benchmark.py --quick --seed 1729 --comparison-directory results/phase12-final-comparison --output-directory results/benchmark
-python scripts/run_fault_detection.py --smoke-test --comparison-directory results/phase12-final-comparison --model-variant physics_informed --seed 1729 --output-directory results/fault
-python scripts/final_evaluation.py --benchmark-directory results/benchmark --comparison-directory results/phase12-final-comparison --id-forecast-directory results/forecast-id --ood-forecast-directory results/forecast-ood --fault-directory results/fault/fault-detection --output-directory results/phase12-final-evaluation
-python scripts/run_predictive.py --comparison-directory results/phase12-final-comparison --seed 1729 --output-directory results/predictive
+.\scripts\build_all_results.ps1
 ```
 
-What each line does, in plain words:
+It runs nine steps and prints each one as it goes:
 
 | # | Step | Result |
 |---|---|---|
-| 1–2 | Simulate 6 normal operating runs (driving and charging) and 6 harsher "stress" runs (hotter, higher current, higher cell resistance) | Training and test data |
+| 1–2 | Simulate 60 normal operating runs (driving and charging) and 12 harsher "stress" runs (hotter, higher current, higher cell resistance). Coolant flow changes every 10 s within each run. | Training and test data |
 | 3 | Train both twins on the normal data and test them on both | The two trained twins |
 | 4–5 | Check how well each twin predicts 30, 60 and 120 seconds ahead | Forecast accuracy |
-| 6 | Run all four controllers through six driving scenarios | Controller comparison |
-| 7 | Triple one cell's resistance and see whether the detector catches it | Fault-detection case |
+| 6 | Run all four controllers through six 10-minute scenarios | Controller comparison |
+| 7 | Triple one cell's resistance at 60 s and see whether the detector catches it | Fault-detection case |
 | 8 | Collect everything into one summary with charts | Final evaluation |
 | 9 | Record one short run of each controller for the dashboard | Dashboard time series |
 
-The same seeds always give the same numbers.
+The same seeds always give the same numbers. On macOS or Linux, run the nine
+`python scripts/...` lines listed inside `scripts/build_all_results.ps1` one by one.
 
 ### Step 3 — Open the dashboard
 
@@ -117,56 +109,83 @@ The dashboard has four tabs:
 |---|---|
 | `python` is not recognised | Install Python 3.11+ and tick "Add to PATH", or try `py` instead of `python`. |
 | Activating `.venv` is blocked in PowerShell | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, then try again. |
-| A step says the output folder **already exists** | The scripts never overwrite results. Delete that folder in `results/` (or `data/processed/`) and rerun the step. |
+| Step 2 says an output folder **already exists** | The scripts never overwrite results. Delete (or rename) the old `results/` and `data/processed/` folders and run Step 2 again. |
 | Port 8501 is busy | Close the other dashboard, or run `$env:STREAMLIT_SERVER_PORT=8502` before Step 3 and open `http://localhost:8502`. |
-| Live Lab says a twin could not be loaded | Step 2, line 3 must save to exactly `results/phase12-final-comparison`. |
+| Live Lab says a twin could not be loaded | Step 2 must have finished; the twins live in `results/phase12-final-comparison`. |
 
 ---
 
 ## Results so far
 
-From the Step 2 run (six short synthetic scenarios, 30 seconds each). These are
-**descriptive results from a small simulated study**, not proof of real-world
+From the Step 2 run: six simulated 10-minute scenarios (normal driving, high
+current, hot ambient, weak cooling, fast charging, and a cell resistance fault).
+These are **descriptive results from a simulated study**, not proof of real-world
 performance.
 
-**Cooling controllers** — average over six scenarios:
+**Cooling controllers** — six scenarios:
 
-| Controller | Average peak cell temperature | Average pump energy |
-|---|---:|---:|
-| Reactive threshold | 33.84 °C | 288.2 J |
-| Reactive PID | 33.96 °C | 50.2 J |
-| Predictive, data-only twin | 33.89 °C | 141.3 J |
-| Predictive, physics-informed twin | 33.96 °C | **33.3 J** |
+| Controller | Average peak cell temperature | Hottest moment | Time above 40 °C (all scenarios) | Average pump energy |
+|---|---:|---:|---:|---:|
+| Reactive threshold | 33.0 °C | 40.3 °C | 272 s | 6.8 kJ |
+| Reactive PID | 38.5 °C | 43.9 °C | 368 s | 9.0 kJ |
+| Predictive, data-only twin | 32.3 °C | 38.5 °C | **0 s** | 13.1 kJ |
+| Predictive, physics-informed twin | 32.5 °C | 39.3 °C | **0 s** | 12.0 kJ |
 
-The physics-informed predictive controller used about **88 % less pump energy**
-than the threshold controller, with peak temperatures within 0.12 °C. All four
-controllers spent the same 15 s above the 40 °C limit in the high-current scenario.
+The predictive controllers are the only ones that **never crossed the 40 °C
+limit**. In the high-current scenario the threshold controller spent 272 s above
+it and PID 185 s, because they only react once the pack is already hot. The
+predictive controllers start cooling early instead. In easy scenarios (normal
+driving, hot ambient, weak cooling) all controllers used similar, small amounts of
+pump energy. In the hard ones the predictive controllers spent **more** energy
+(up to about 50 kJ against 33 kJ) to stay safe, which is the trade-off.
 
-**Digital twins** — average prediction error one second ahead:
+**Digital twins** — prediction error:
 
-| Test data | Data-only twin | Physics-informed twin |
-|---|---:|---:|
-| Similar to training | 0.34 °C | 0.36 °C |
-| Harsher than training | 3.29 °C | **3.17 °C** |
+| Test data | Horizon | Data-only twin | Physics-informed twin |
+|---|---|---:|---:|
+| Similar to training | 1 s | 0.031 °C | 0.037 °C |
+| Similar to training | 30 s / 120 s | 1.2 / 2.9 °C | 1.4 / 3.5 °C |
+| Harsher than training | 1 s | 0.172 °C | **0.166 °C** |
+| Harsher than training | 30 s / 120 s | 5.3 / 11.4 °C | **5.0** / 12.5 °C |
 
-On the harsher conditions, the physics-informed twin's worst single-cell error was
-16.6 % lower (4.98 °C vs 5.97 °C).
+Both twins correctly predict that more coolant flow means a cooler pack, and get
+the size of that effect within about 15–20 % of the simulator. The
+physics-informed twin is about as accurate as the data-only one: slightly better
+one step ahead on harsher data, slightly worse on long forecasts. **It is not
+clearly better overall.**
 
-**Fault detection** — a cell with triple resistance (C6) was flagged at 15 s and
-crossed 40 °C at 26 s: **11 seconds of warning**, without the detector being told
-which cell was faulty.
+**Fault detection** — a cell (C6) whose resistance triples at 60 s was flagged
+at 63 s and crossed 40 °C at 102 s: **39 seconds of warning**, with no false
+alarms on other cells, and without the detector being told which cell was faulty.
 
 **Known limits**
 
-- Predictions are good a few seconds ahead but drift badly over 60–120 seconds
-  (average errors of about 25–30 °C on normal data, far more on the harsher
-  data), so long-range forecasts are not yet reliable.
-- The study is small: six training runs and 30-second scenarios. It shows the
-  method works end to end; it does not establish statistical significance.
+- Forecasts are good up to about 30 seconds ahead on familiar conditions; on
+  harsher conditions 120-second forecasts are off by about 11–13 °C.
+- In hard scenarios the predictive controllers keep the pack safe by pumping
+  more, so they use more pump energy than the reactive ones there.
+- The detector uses a 0.05 °C noise floor (about one sensor resolution); the
+  simulation itself has no sensor noise.
 - This detects abnormal heating from a resistance fault. It does **not** model or
   detect thermal runaway.
 - The pump energy uses a simple cubic approximation (power ∝ flow³), not a
   manufacturer's pump curve.
+
+### What changed after the first submission
+
+The first version had three problems, found and fixed:
+
+1. **The cell resistance (15 mΩ) and cold plate were unrealistic.** Even full
+   coolant flow could not hold the pack below 70 °C. Resistance is now 3 mΩ and
+   the cold plate reaches about 330 W/m²K at full flow, so cooling actually
+   matters.
+2. **The twins had learned the cooling effect backwards.** Coolant flow was
+   constant within each training run, and only 6 runs were used, so the twins
+   could not tell what flow does. Flow now changes every 10 s and 60 runs are
+   used.
+3. **The predictive controller over-cooled or under-cooled.** It now has a
+   33 °C comfort target, so it spends pump energy only when the twin forecasts the
+   pack heading above it.
 
 ---
 
@@ -186,7 +205,7 @@ tests/        automated checks
 ```
 
 All physical values (cell mass 0.8 kg, heat capacity 900 J/kg·K, resistance
-15 mΩ, coolant flow 0–0.1 kg/s, 40 °C limit, …) live in `configs/` and are
+3 mΩ, coolant flow 0–0.1 kg/s, 40 °C limit, …) live in `configs/` and are
 illustrative, not taken from a specific manufacturer's cell.
 
 ---
@@ -199,8 +218,8 @@ python -m ruff check .              # code style
 python -m mypy src tests scripts    # type checks
 ```
 
-- **Longer benchmark:** run `scripts/benchmark.py` without `--quick` (600 s per
-  scenario). It needs fully trained twins from Step 2, line 3.
+- **Quick benchmark:** `scripts/benchmark.py --quick` runs 30-second scenarios
+  for a fast workflow check; Step 2 uses the full 600-second version.
 - **Standalone charts:** `results/phase12-final-evaluation/figures/` contains six
   interactive HTML charts that open in any browser without the dashboard.
 - **Launching Streamlit directly** (without `run_dashboard.py`): set
