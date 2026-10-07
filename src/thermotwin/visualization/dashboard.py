@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import streamlit as st
 from plotly.graph_objects import Figure  # type: ignore[import-untyped]
 
+from thermotwin.experiments.final_evaluation import FinalEvaluation
 from thermotwin.visualization.contracts import (
     ControllerTrace,
     DashboardData,
@@ -14,7 +16,7 @@ from thermotwin.visualization.contracts import (
     FaultSummary,
 )
 from thermotwin.visualization.dashboard_views import render_application
-from thermotwin.visualization.data import load_dashboard_data
+from thermotwin.visualization.data import load_dashboard_data, load_evaluation
 from thermotwin.visualization.plots import (
     controller_comparison_figure,
     coolant_flow_figure,
@@ -45,12 +47,31 @@ _METRIC_LABELS = (
 )
 
 
+_DEFAULT_EVALUATION_DIRECTORY = (
+    Path(__file__).resolve().parents[3] / "results" / "phase12-final-evaluation"
+)
+
+
 @st.cache_resource(show_spinner="Validating saved ThermoTwin evidence…")
 def _load_dashboard_data_cached(
     predictive_directory: str, fault_directory: str
 ) -> DashboardData:
     """Cache strict immutable artifact parsing for responsive navigation."""
     return load_dashboard_data(predictive_directory, fault_directory)
+
+
+@st.cache_resource(show_spinner="Loading benchmark evaluation…")
+def _load_evaluation_cached(directory: str) -> FinalEvaluation:
+    return load_evaluation(directory)
+
+
+def _default_evaluation_directory() -> str:
+    configured = os.environ.get("THERMOTWIN_EVALUATION_RESULTS")
+    if configured is not None:
+        return configured
+    if _DEFAULT_EVALUATION_DIRECTORY.is_dir():
+        return str(_DEFAULT_EVALUATION_DIRECTORY)
+    return ""
 
 
 def _format_metric(value: float | int, unit: str) -> str:
@@ -229,17 +250,27 @@ def main() -> None:
     )
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
     with st.sidebar:
-        st.header("Evidence sources")
-        predictive_directory = st.text_input(
-            "Predictive results directory",
-            value=os.environ.get("THERMOTWIN_PREDICTIVE_RESULTS", ""),
-            key="predictive_directory",
+        st.markdown("## ThermoTwin")
+        sources_ready = bool(
+            os.environ.get("THERMOTWIN_PREDICTIVE_RESULTS")
+            and os.environ.get("THERMOTWIN_FAULT_RESULTS")
         )
-        fault_directory = st.text_input(
-            "Fault results directory",
-            value=os.environ.get("THERMOTWIN_FAULT_RESULTS", ""),
-            key="fault_directory",
-        )
+        with st.expander("Evidence sources", expanded=not sources_ready):
+            predictive_directory = st.text_input(
+                "Predictive results directory",
+                value=os.environ.get("THERMOTWIN_PREDICTIVE_RESULTS", ""),
+                key="predictive_directory",
+            )
+            fault_directory = st.text_input(
+                "Fault results directory",
+                value=os.environ.get("THERMOTWIN_FAULT_RESULTS", ""),
+                key="fault_directory",
+            )
+            evaluation_directory = st.text_input(
+                "Benchmark evaluation directory (optional)",
+                value=_default_evaluation_directory(),
+                key="evaluation_directory",
+            )
     if not predictive_directory.strip() or not fault_directory.strip():
         st.title("ThermoTwin · Battery Thermal Digital Twin")
         st.caption(
@@ -247,8 +278,8 @@ def main() -> None:
             "cooling comparisons, and fault-induced anomaly evidence."
         )
         st.info(
-            "Enter both artifact directories in the sidebar. Point them to saved "
-            "predictive comparison and fault detection results."
+            "Enter both artifact directories in the sidebar under Evidence sources. "
+            "Point them to saved predictive comparison and fault detection results."
         )
         return
     try:
@@ -257,10 +288,18 @@ def main() -> None:
         st.title("ThermoTwin · Battery Thermal Digital Twin")
         st.error(f"Could not load dashboard artifacts: {exc}")
         return
+    evaluation: FinalEvaluation | None = None
+    if evaluation_directory.strip():
+        try:
+            evaluation = _load_evaluation_cached(evaluation_directory.strip())
+        except (OSError, UnicodeError, ValueError, KeyError, TypeError) as exc:
+            st.sidebar.warning(f"Benchmark evaluation not loaded: {exc}")
     render_application(
         data,
+        evaluation=evaluation,
         predictive_directory=predictive_directory,
         fault_directory=fault_directory,
+        evaluation_directory=evaluation_directory,
     )
 
 

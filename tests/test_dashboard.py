@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import replace
@@ -27,14 +28,18 @@ LAUNCHER_PATH = PROJECT_ROOT / "scripts" / "run_dashboard.py"
 
 
 def _run_dashboard(
-    predictive: Path | str, fault: Path | str, monkeypatch: pytest.MonkeyPatch
+    predictive: Path | str,
+    fault: Path | str,
+    monkeypatch: pytest.MonkeyPatch,
+    evaluation: str = "",
 ) -> AppTest:
     monkeypatch.setenv("THERMOTWIN_PREDICTIVE_RESULTS", str(predictive))
     monkeypatch.setenv("THERMOTWIN_FAULT_RESULTS", str(fault))
-    return AppTest.from_file(str(DASHBOARD_PATH)).run()
+    monkeypatch.setenv("THERMOTWIN_EVALUATION_RESULTS", evaluation)
+    return AppTest.from_file(str(DASHBOARD_PATH), default_timeout=120).run()
 
 
-def test_dashboard_renders_artifacts_with_selectors_metrics_and_fault_panel(
+def test_dashboard_renders_guided_demo_with_story_navigation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     predictive, fault = make_artifacts(tmp_path)
@@ -42,66 +47,114 @@ def test_dashboard_renders_artifacts_with_selectors_metrics_and_fault_panel(
     app = _run_dashboard(predictive, fault, monkeypatch)
 
     assert not app.exception
-    assert any("ThermoTwin" in item.value for item in app.title)
-    rendered_copy = [item.value for item in app.caption] + [
-        item.value for item in app.info
-    ]
-    assert any("synthetic" in value.lower() for value in rendered_copy)
+    assert not app.error
+    assert any("synthetic" in item.value.lower() for item in app.info)
     assert all("thermal-runaway" not in item.value for item in app.caption)
-    assert len(app.metric) >= 6
-    assert len(app.selectbox) >= 4
-    assert {item.label for item in app.selectbox} >= {
-        "Controller",
-        "Thermal twin model",
-        "Forecast horizon (seconds)",
-        "Equation explorer",
-    }
-    markdown = [item.value for item in app.markdown]
-    assert any("Evaluation-only injected-fault truth" in value for value in markdown)
-    assert any("Configured cell C5" in value for value in markdown)
-    chart_keys = (
-        "v2_guided_measured_heatmap",
-        "v2_guided_predicted_heatmap",
-        "v2_guided_controller_comparison",
-    )
-    assert all(app.get_by_key(key) is not None for key in chart_keys)
+    assert app.get_by_key("v2_guided_primary") is not None
+    assert {item.label for item in app.selectbox} >= {"Equation explorer"}
+    options = app.radio(key="guided_story_step").options
+    for _ in range(len(options) - 1):
+        app.button(key="guided_next").click().run()
+        assert not app.exception
+        assert not app.error
+    assert app.radio(key="guided_story_step").value == options[-1]
+    app.button(key="guided_prev").click().run()
+    assert app.radio(key="guided_story_step").value == options[-2]
 
 
-def test_dashboard_v2_navigation_renders_every_judge_view(
+def test_guided_forecast_step_shows_measured_and_forecast_maps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    predictive, fault = make_artifacts(tmp_path)
+    app = _run_dashboard(predictive, fault, monkeypatch)
+    options = app.radio(key="guided_story_step").options
+    app.radio(key="guided_story_step").set_value(options[3]).run()
+
+    assert not app.exception
+    for horizon in (30, 60, 120):
+        app.radio(key="g4_horizon").set_value(horizon).run()
+        assert not app.exception
+        assert app.get_by_key("v2_guided_measured_heatmap") is not None
+        assert app.get_by_key("v2_guided_predicted_heatmap") is not None
+
+
+def test_dashboard_navigation_renders_every_judge_view(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     predictive, fault = make_artifacts(tmp_path)
     app = _run_dashboard(predictive, fault, monkeypatch)
 
     assert not app.exception
-    workspace = next(item for item in app.radio if item.label == "Workspace")
+    assert tuple(app.radio(key="v2_workspace").options) == (
+        "Guided Demo",
+        "Live Thermal Lab",
+        "Controllers & Twins",
+        "Fault Lab",
+    )
 
-    workspace.set_value("Live Thermal Lab")
-    app.run()
+    app.radio(key="v2_workspace").set_value("Live Thermal Lab").run()
     assert not app.exception
-    assert app.get_by_key("v2_live_heatmap") is not None
-    assert app.get_by_key("v2_live_temperature_history") is not None
+    assert any("Run simulation" in item.value for item in app.info)
 
-    workspace = next(item for item in app.radio if item.label == "Workspace")
-    workspace.set_value("Cooling Comparison")
-    app.run()
+    app.radio(key="v2_workspace").set_value("Controllers & Twins").run()
     assert not app.exception
-    assert app.get_by_key("v2_cooling_controller_matrix") is not None
-    assert app.get_by_key("v2_cooling_forecast_comparison") is not None
+    assert any("Benchmark evaluation not loaded" in item.value for item in app.info)
+    assert app.get_by_key("v2_evidence_temperature_history") is not None
 
-    workspace = next(item for item in app.radio if item.label == "Workspace")
-    workspace.set_value("Fault Lab")
-    app.run()
+    app.radio(key="v2_workspace").set_value("Fault Lab").run()
     assert not app.exception
     assert app.get_by_key("v2_fault_diagnostics") is not None
     assert app.get_by_key("v2_fault_scores") is not None
+    markdown = [item.value for item in app.markdown]
+    assert any("Evaluation-only injected-fault truth" in value for value in markdown)
+    assert any("C5" in value and "Configured cell" in value for value in markdown)
 
-    workspace = next(item for item in app.radio if item.label == "Workspace")
-    workspace.set_value("Saved Evidence")
-    app.run()
+
+def test_live_lab_runs_only_on_request_and_plays_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    predictive, fault = make_artifacts(tmp_path)
+    app = _run_dashboard(predictive, fault, monkeypatch)
+    app.radio(key="v2_workspace").set_value("Live Thermal Lab").run()
+    with pytest.raises(KeyError):
+        app.get_by_key("v2_live_heatmap")
+
+    app.selectbox(key="lab_controller").set_value("Reactive threshold")
+    app.slider(key="lab_duration").set_value(10)
+    app.checkbox(key="lab_fault").check()
+    app.number_input(key="lab_fault_start").set_value(40)
+    next(item for item in app.button if "Run simulation" in item.label).click().run()
+
     assert not app.exception
-    assert app.get_by_key("v2_evidence_measured_heatmap") is not None
-    assert app.get_by_key("v2_evidence_controller_comparison") is not None
+    assert not app.error
+    assert any("Fault start moved" in item.value for item in app.warning)
+    assert app.get_by_key("v2_live_heatmap") is not None
+    assert app.get_by_key("v2_live_temperature_history") is not None
+    assert len(app.metric) == 6
+
+    app.button(key="lab_play").click().run()
+    assert not app.exception
+    app.slider(key="lab_frame").set_value(3).run()
+    assert not app.exception
+    assert app.metric[0].value == "4 s"
+
+
+def test_dashboard_benchmark_views_with_saved_evaluation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    evaluation = PROJECT_ROOT / "results" / "phase12-final-evaluation"
+    if not (evaluation / "evaluation" / "final_evaluation.json").is_file():
+        pytest.skip("saved final evaluation artifact is not available locally")
+    predictive, fault = make_artifacts(tmp_path)
+    app = _run_dashboard(predictive, fault, monkeypatch, str(evaluation))
+    app.radio(key="v2_workspace").set_value("Controllers & Twins").run()
+
+    assert not app.exception
+    assert app.get_by_key("v2_cooling_controller_matrix") is not None
+    assert app.get_by_key("v2_cooling_forecast_comparison") is not None
+    for option in app.radio(key="ct_metric").options:
+        app.radio(key="ct_metric").set_value(option).run()
+        assert not app.exception
 
 
 def test_dashboard_shows_instructions_for_empty_paths(
@@ -135,13 +188,15 @@ def test_dashboard_paths_can_be_set_in_sidebar_inputs(
     monkeypatch.setenv("THERMOTWIN_PREDICTIVE_RESULTS", "")
     monkeypatch.setenv("THERMOTWIN_FAULT_RESULTS", "")
 
-    app = AppTest.from_file(str(DASHBOARD_PATH)).run()
+    monkeypatch.setenv("THERMOTWIN_EVALUATION_RESULTS", "")
+
+    app = AppTest.from_file(str(DASHBOARD_PATH), default_timeout=120).run()
     app.text_input[0].set_value(str(predictive))
     app.text_input[1].set_value(str(fault))
     app.run()
 
     assert not app.exception
-    assert len(app.metric) == 6
+    assert app.get_by_key("v2_guided_primary") is not None
 
 
 def test_launcher_builds_child_command_and_environment(
@@ -187,7 +242,37 @@ def test_launcher_builds_child_command_and_environment(
     assert "--server.headless=true" in command
     assert environment["THERMOTWIN_PREDICTIVE_RESULTS"] == str(predictive)
     assert environment["THERMOTWIN_FAULT_RESULTS"] == str(fault)
+    assert environment.get("THERMOTWIN_EVALUATION_RESULTS") == os.environ.get(
+        "THERMOTWIN_EVALUATION_RESULTS"
+    )
     assert captured["check"] is False
+
+    export = tmp_path / "export"
+    (export / "evaluation").mkdir(parents=True)
+    (export / "evaluation" / "final_evaluation.json").write_text("{}", encoding="utf-8")
+    launcher_main(
+        [
+            "--predictive-directory",
+            str(predictive),
+            "--fault-directory",
+            str(fault),
+            "--evaluation-directory",
+            str(export),
+        ]
+    )
+    environment = cast(dict[str, str], captured["env"])
+    assert environment["THERMOTWIN_EVALUATION_RESULTS"] == str(export.resolve())
+    with pytest.raises(SystemExit):
+        launcher_main(
+            [
+                "--predictive-directory",
+                str(predictive),
+                "--fault-directory",
+                str(fault),
+                "--evaluation-directory",
+                str(tmp_path / "missing"),
+            ]
+        )
 
 
 def test_temperature_figure_uses_trace_limit_not_fault_limit(tmp_path: Path) -> None:

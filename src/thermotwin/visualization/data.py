@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from thermotwin.experiments.final_evaluation import (
+    FinalEvaluation,
+    load_final_evaluation,
+)
 from thermotwin.visualization.contracts import (
     ControllerTrace,
     DashboardData,
@@ -30,12 +34,26 @@ def load_dashboard_data(
     )
 
 
+def load_evaluation(directory: str | Path) -> FinalEvaluation:
+    """Strictly load a saved final-evaluation directory for benchmark views.
+
+    Accepts either the ``evaluation/`` folder holding ``final_evaluation.json``
+    or the export root that contains it.
+    """
+    root = Path(directory)
+    if not (root / "final_evaluation.json").is_file():
+        root = root / "evaluation"
+    return load_final_evaluation(root)
+
+
 __all__ = [
     "ControllerTrace",
     "DashboardData",
     "FaultEvent",
     "FaultSummary",
     "FaultTrace",
+    "FinalEvaluation",
     "ForecastSnapshot",
     "load_dashboard_data",
+    "load_evaluation",
 ]

@@ -31,6 +31,14 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help="fault run directory or parent containing fault-detection/",
     )
+    parser.add_argument(
+        "--evaluation-directory",
+        default=None,
+        help=(
+            "optional final-evaluation export (or its evaluation/ folder) for the "
+            "benchmark views; defaults to results/phase12-final-evaluation if present"
+        ),
+    )
     return parser
 
 
@@ -66,6 +74,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     environment = os.environ.copy()
     environment["THERMOTWIN_PREDICTIVE_RESULTS"] = str(predictive)
     environment["THERMOTWIN_FAULT_RESULTS"] = str(fault)
+    if arguments.evaluation_directory is not None:
+        evaluation = Path(arguments.evaluation_directory).expanduser().resolve()
+        if not (
+            (evaluation / "final_evaluation.json").is_file()
+            or (evaluation / "evaluation" / "final_evaluation.json").is_file()
+        ):
+            parser.error(
+                "evaluation directory must contain final_evaluation.json directly "
+                f"or under evaluation/: {evaluation}"
+            )
+        environment["THERMOTWIN_EVALUATION_RESULTS"] = str(evaluation)
     existing_pythonpath = environment.get("PYTHONPATH")
     pythonpath_parts = [str(_SOURCE_DIRECTORY)]
     if existing_pythonpath:
@@ -78,6 +97,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "run",
         str(_DASHBOARD_PATH),
         "--server.headless=true",
+        # Theme flags mirror .streamlit/config.toml so the launcher works from any
+        # working directory.
+        "--theme.base=dark",
+        "--theme.primaryColor=#27C2D1",
+        "--theme.backgroundColor=#071018",
+        "--theme.secondaryBackgroundColor=#0D1822",
+        "--theme.textColor=#F3F7F9",
+        "--client.toolbarMode=minimal",
     ]
     result = subprocess.run(command, env=environment, check=False)
     return result.returncode

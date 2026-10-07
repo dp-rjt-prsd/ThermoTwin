@@ -117,6 +117,16 @@ def load_live_configuration() -> LiveConfiguration:
     )
 
 
+def load_detector_settings() -> dict[str, float]:
+    """Read the anomaly-detector threshold and fault multiplier used by the runs."""
+    values = _read_yaml(_PROJECT_ROOT / "configs" / "diagnostics.yaml")
+    fault = values["fault_detection"]
+    return {
+        "score_threshold": float(fault["detector"]["score_threshold"]),
+        "resistance_multiplier": float(fault["resistance_multiplier"]),
+    }
+
+
 def make_environment(
     configuration: LiveConfiguration,
     *,
@@ -251,6 +261,7 @@ def make_controller(
 
 __all__ = [
     "LiveConfiguration",
+    "load_detector_settings",
     "load_forecaster",
     "load_live_configuration",
     "make_controller",
