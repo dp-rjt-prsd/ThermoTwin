@@ -841,15 +841,23 @@ def _forecast_metrics_for_distribution(
             if not isinstance(sources, list) or any(
                 type(item) is not str for item in sources
             ):
-                raise ValueError("forecast dataset source labels are invalid")
-            expected_config = (
-                "configs/dataset_ood.yaml"
-                if distribution == "out_of_distribution"
-                else "configs/dataset.yaml"
-            )
-            if sources != [expected_config]:
                 raise ValueError(
-                    "forecast dataset source label conflicts with distribution"
+                    "forecast generation config source_config_files must be a "
+                    "string array"
+                )
+            expected_sources = [
+                "configs/pack.yaml",
+                "configs/simulation.yaml",
+                (
+                    "configs/dataset_ood.yaml"
+                    if distribution == "out_of_distribution"
+                    else "configs/dataset.yaml"
+                ),
+            ]
+            if sources != expected_sources:
+                raise ValueError(
+                    "forecast generation config source files are not canonical "
+                    "for its distribution"
                 )
             continue
         elif key == "evaluation_test_csv":

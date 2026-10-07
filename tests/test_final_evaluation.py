@@ -223,9 +223,13 @@ def _make_inputs(
                     {
                         "seed": dataset_manifest["seed"],
                         "source_config_files": [
-                            "configs/dataset_ood.yaml"
-                            if distribution == "out_of_distribution"
-                            else "configs/dataset.yaml"
+                            "configs/pack.yaml",
+                            "configs/simulation.yaml",
+                            (
+                                "configs/dataset_ood.yaml"
+                                if distribution == "out_of_distribution"
+                                else "configs/dataset.yaml"
+                            ),
                         ],
                     },
                     sort_keys=True,
@@ -464,6 +468,42 @@ def test_nonfinite_forecast_physical_csv_value_fails_closed(
         value,
     )
     with pytest.raises(ValueError, match="non-finite"):
+        aggregate_final_evaluation(
+            benchmark, comparison, id_forecast, ood_forecast, fault
+        )
+
+
+@pytest.mark.parametrize(
+    "source_config_files",
+    (
+        ["configs/simulation.yaml", "configs/dataset.yaml"],
+        ["configs/pack.yaml", "configs/simulation.yaml", "configs/dataset_ood.yaml"],
+        [
+            "configs/pack.yaml",
+            "configs/simulation.yaml",
+            "configs/dataset.yaml",
+            "configs/dataset.yaml",
+        ],
+        [
+            "configs/pack.yaml",
+            "configs/simulation.yaml",
+            "configs/dataset.yaml",
+            "configs/training.yaml",
+        ],
+        ["configs/pack.yaml", "configs/simulation.yaml", 17],
+    ),
+)
+def test_noncanonical_generation_source_config_list_fails_closed(
+    tmp_path: Path, source_config_files: list[object]
+) -> None:
+    benchmark, comparison, id_forecast, ood_forecast, fault = _make_inputs(tmp_path)
+    config_path = id_forecast / "evaluated_dataset" / "generation_config.json"
+    generation_config = json.loads(config_path.read_text(encoding="utf-8"))
+    generation_config["source_config_files"] = source_config_files
+    _write_json(config_path, generation_config)
+    with pytest.raises(
+        ValueError, match="source files are not canonical|source_config_files"
+    ):
         aggregate_final_evaluation(
             benchmark, comparison, id_forecast, ood_forecast, fault
         )
