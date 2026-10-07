@@ -274,9 +274,11 @@ Phase 12 begins with confirmed evidence and user-facing defect repairs. The benc
 - TASK-69: Add benchmark CLI quick/full workflows with user-grade error handling.
   - Likely file scope: `scripts/benchmark.py`; `tests/test_benchmark_script.py`.
   - Acceptance: `--quick` deterministically exercises all six scenarios and four variants but is labeled workflow-only evidence; full mode requires validated non-smoke model artifacts and rejects missing/incompatible provenance; invalid paths, empty splits, existing outputs, and malformed artifacts return concise actionable stderr without a traceback.
-  - Verification: `python -m pytest tests/test_benchmark_script.py`; `python scripts/benchmark.py --quick --output <new-temporary-directory>`.
+  - Verification: `python -m pytest tests/test_benchmark_script.py`; `python scripts/benchmark.py --quick --output-directory <new-temporary-directory>`.
   - Dependencies: TASK-68.
+  - Accepted: 7 focused CLI tests passed; scoped Ruff and strict mypy passed. A standalone quick run generated and reloaded all 24 cells. Identical quick reruns with the same model artifacts produced matching manifests and cell artifacts, and full mode rejected smoke-trained provenance before scenario execution. Quick evidence is labeled `workflow_only`; it demonstrates workflow integrity and makes no model or controller superiority claim.
 - Checkpoint P12B: a fresh quick 6-by-4 matrix is complete, deterministic, reloadable, and provenance-valid; full-mode smoke-artifact rejection is demonstrated before final aggregation.
+  - Accepted: the standalone quick bundle reloaded with 24 cells; deterministic reruns matched saved manifests and cell artifacts; full-mode smoke rejection passed. This is workflow-only evidence and does not establish comparative performance.
 - TASK-70: Aggregate the saved final evaluation without unsupported claims.
   - Likely file scope: `src/thermotwin/experiments/final_evaluation.py`; `tests/test_final_evaluation.py`.
   - Acceptance: aggregation reports model ID/OOD MAE, RMSE, maximum cell error, 30/60/120-second rollout error, physics residual, controller peak/mean/spread temperature, pump energy, safety count/duration, and fault detection lead time from saved artifacts only; missing matrix cells or incompatible provenance fail; results describe configured runs and make no CI, significance, generalization, or superiority claim unless measured values support it.

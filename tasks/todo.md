@@ -1,4 +1,4 @@
-# ThermoTwin Phase 0-11 Tasks
+# ThermoTwin Phase 0-12 Tasks
 
 ## Phase 0
 
@@ -360,15 +360,17 @@ Phase 12 is a deterministic, descriptive six-scenario benchmark, not evidence of
   - Verify: `python -m pytest tests/test_benchmark.py tests/test_benchmark_serialization.py`.
   - Dependencies: TASK-66, TASK-67, Checkpoint P12A.
   - Accepted: all 24 cells reuse each scenario object/seed/configuration, convert measured metrics without recomputation drift, and persist through exact-inventory SHA-256-checked sibling staging with atomic publication and strict reload validation. Verification passed with 30 tests, Ruff, and strict mypy, including hash-refreshed semantic tampering and full-mode smoke rejection.
-- [ ] TASK-69 Add quick/full benchmark CLI workflows.
+- [x] TASK-69 Add quick/full benchmark CLI workflows.
   - Scope: `scripts/benchmark.py`; `tests/test_benchmark_script.py`.
   - Acceptance: quick mode runs the full 6-by-4 matrix and labels it workflow-only; full mode requires validated non-smoke model provenance; malformed/missing paths, empty data, incompatibility, and existing outputs produce concise actionable stderr without traceback.
-  - Verify: `python -m pytest tests/test_benchmark_script.py`; `python scripts/benchmark.py --quick --output <new-temporary-directory>`.
+  - Verify: `python -m pytest tests/test_benchmark_script.py`; `python scripts/benchmark.py --quick --output-directory <new-temporary-directory>`.
   - Dependencies: TASK-68.
-- [ ] Checkpoint P12B: benchmark execution and persistence accepted.
+- Accepted: 7 focused CLI tests passed; scoped Ruff and strict mypy passed. The standalone quick workflow generated and reloaded all 24 cells. Repeated quick runs with identical model artifacts produced matching manifests and cell artifacts; full mode rejected smoke-trained provenance before scenario execution. Quick results are labeled `workflow_only` and do not demonstrate model or controller superiority.
+- [x] Checkpoint P12B: benchmark execution and persistence accepted.
   - Acceptance: a fresh quick matrix has 24 complete, deterministic, reloadable, provenance-valid cells and full mode demonstrably rejects smoke-trained artifacts.
   - Verify: rerun TASK-69 verification against fresh temporary outputs and compare manifests/metrics.
   - Dependencies: TASK-69.
+  - Accepted: standalone quick bundle reloaded with 24 cells; deterministic reruns matched saved manifests and cell artifacts; full-mode smoke rejection passed. Evidence remains workflow-only and makes no superiority claim.
 - [ ] TASK-70 Aggregate final evaluation artifacts.
   - Scope: `src/thermotwin/experiments/final_evaluation.py`; `tests/test_final_evaluation.py`.
   - Acceptance: saved-only aggregation reports ID/OOD MAE/RMSE/max error, 30/60/120-second errors, physics residual, controller peak/mean/spread, pump energy, safety count/duration, and fault lead time; incomplete/incompatible evidence fails; conclusions stay descriptive unless results support more.
